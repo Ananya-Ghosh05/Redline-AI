@@ -42,7 +42,6 @@ const SEVERITY_KEYWORDS = {
     "crash",
     "collision",
     "hit and run",
-    "unconscious",
     "broken bone",
     "fracture",
     "seizure",
