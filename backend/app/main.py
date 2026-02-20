@@ -29,7 +29,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.websockets.connection_manager import router as websocket_router
+
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(websocket_router, prefix="/ws", tags=["websockets"])
 
 @app.get("/health")
 async def health_check():
