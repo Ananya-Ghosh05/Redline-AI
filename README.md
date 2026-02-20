@@ -1,132 +1,50 @@
 # Redline AI
 
-A production-grade, modular, agentic AI system for emergency response intelligence.
-
-## Architecture
-
-Redline AI follows a clean architecture with dependency injection and SOLID principles. The system processes emergency calls through a pipeline of specialized agents:
-
-1. **STT (Speech-to-Text)**: Converts audio to text
-2. **Emotion Analysis**: Analyzes emotional content
-3. **Reasoning**: Applies contextual reasoning
-4. **Severity Assessment**: Deterministically scores emergency severity
-5. **Safety Checks**: Validates response safety
-6. **Dispatch**: Generates dispatch recommendations
+## Project Overview
+Redline AI is a state-of-the-art tool designed to enhance productivity and streamline workflows using artificial intelligence. It integrates various functionalities to assist users in managing their daily tasks efficiently.
 
 ## Features
+- **AI-Powered Task Management**: Automatically prioritize and categorize tasks based on user preferences and deadlines.
+- **Collaboration Tools**: Share tasks and updates with team members, promoting collaboration.
+- **Analytics Dashboard**: Gain insights into productivity trends and task completion rates.
+- **Cross-Platform Compatibility**: Accessible on multiple devices, ensuring flexibility.
 
-- **Modular Design**: Pluggable AI components
-- **Pydantic Validation**: Structured data with schema validation
-- **Deterministic Logic**: Separate decision logic from LLM reasoning
-- **Memory Management**: Redis for short-term, PostgreSQL for long-term storage
-- **Docker Ready**: Containerized deployment
-- **Async Processing**: High-performance async processing
-- **Comprehensive Testing**: Unit tests with pytest
+## Installation
+To install Redline AI, follow these steps:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Ananya-Ghosh05/Redline-AI.git
+   ```
+2. Navigate to the project directory:
+   ```bash
+   cd Redline-AI
+   ```
+3. Install the required dependencies:
+   ```bash
+   npm install
+   ```
 
-## Quick Start
-
-### Using Docker Compose
-
+## Usage
+After installation, you can start using Redline AI by running:
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd redline-ai
-
-# Start all services
-docker-compose up --build
-
-# The API will be available at http://localhost:8000
+npm start
 ```
+Access the application in your web browser at `http://localhost:3000`.
 
-### Local Development
+## Contribution Guidelines
+We welcome contributions from the community! Here's how you can contribute:
+1. Fork the repository and create your branch:
+   ```bash
+   git checkout -b feature/YourFeature
+   ```
+2. Make your changes and commit them:
+   ```bash
+   git commit -m 'Add a new feature'
+   ```
+3. Push to your branch:
+   ```bash
+   git push origin feature/YourFeature
+   ```
+4. Open a pull request.
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Start Redis and PostgreSQL (or use docker-compose for just the databases)
-docker-compose up redis postgres
-
-# Run the application
-uvicorn api.main:app --reload
-
-# Run tests
-pytest
-```
-
-## API Usage
-
-### Process Emergency Call
-
-```bash
-curl -X POST "http://localhost:8000/process-emergency" \
-     -H "Content-Type: multipart/form-data" \
-     -F "file=@emergency_call.wav"
-```
-
-### Health Check
-
-```bash
-curl http://localhost:8000/health
-```
-
-## Project Structure
-
-```
-redline-ai/
-├── agents/                 # Agent implementations
-│   ├── base.py            # Base agent classes
-│   ├── stt/
-│   ├── emotion/
-│   ├── reasoning/
-│   ├── severity/
-│   ├── safety/
-│   └── dispatch/
-├── plugins/               # Plugin system
-│   ├── base.py           # Base plugin classes
-│   ├── registry.py       # Plugin registry
-│   └── [component]/      # Component plugins
-├── core/                  # Core system components
-│   ├── orchestrator.py   # Main orchestrator
-│   ├── memory/           # Memory management
-│   └── schemas/          # Pydantic schemas
-├── api/                   # FastAPI application
-├── tests/                 # Unit tests
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── pyproject.toml
-```
-
-## Development
-
-### Adding New Agents
-
-1. Create agent class inheriting from `BaseAgent`
-2. Implement `process()`, `get_input_schema()`, `get_output_schema()`
-3. Create corresponding plugin
-4. Register in orchestrator
-
-### Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_agents.py
-
-# Run with coverage
-pytest --cov=agents --cov=core
-```
-
-## Configuration
-
-Environment variables:
-
-- `REDIS_URL`: Redis connection URL (default: redis://localhost:6379)
-- `POSTGRES_URL`: PostgreSQL connection URL
-
-## License
-
-[License information]
+For more detailed information, check our [CONTRIBUTING.md](CONTRIBUTING.md) file.
