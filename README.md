@@ -1,141 +1,174 @@
-# Redline AI
+# Redline-AI
 
-## Project Overview
-Redline AI is an Emergency Response Intelligence Platform that leverages artificial intelligence to process and analyze emergency calls in real-time. The system uses a multi-stage AI pipeline to transcribe audio, analyze emotions, apply reasoning, assess severity, perform safety checks, and generate comprehensive dispatch reports to help emergency responders make faster, more informed decisions.
+AI-powered IVR (Interactive Voice Response) system for first responders. Streamlines voice data input from emergency calls with real-time translation, severity analysis, responder routing, and full call history via PostgreSQL.
 
 ## Features
-- **Speech-to-Text (STT)**: Converts emergency call audio to accurate transcripts
-- **Emotion Analysis**: Detects and analyzes emotional states from caller transcripts to assess urgency
-- **AI-Powered Reasoning**: Applies intelligent reasoning to understand the context and nature of emergencies
-- **Severity Assessment**: Automatically evaluates emergency severity levels to prioritize responses
-- **Safety Validation**: Performs safety checks and validations on extracted information
-- **Automated Dispatch**: Generates detailed dispatch reports with actionable intelligence for first responders
-- **Plugin Architecture**: Extensible system supporting custom agents and processing stages
-- **Real-time Processing**: Asynchronous pipeline for fast emergency call processing
-- **Health Monitoring**: Built-in health checks and status monitoring for all pipeline stages
 
-## Installation
-To install Redline AI, follow these steps:
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Ananya-Ghosh05/Redline-AI.git
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd Redline-AI
-   ```
-3. Install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Usage
-After installation, you can start the Redline AI server by running:
-```bash
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
-```
-Access the API documentation at `http://localhost:8000/docs`.
-
-### Using Docker
-Alternatively, you can run Redline AI using Docker:
-```bash
-# Build the Docker image
-docker build -t redline-ai .
-
-# Run the container
-docker run -p 8000:8000 redline-ai
-```
-
-Or use Docker Compose:
-```bash
-docker-compose up
-```
-
-### API Endpoints
-- `GET /` - Root endpoint with platform information
-- `GET /health` - Health check endpoint showing pipeline status
-- `POST /process-emergency` - Process emergency call audio file and generate dispatch report
+- **Voice Data Processing** – Transcribes incoming emergency calls using Google Cloud Speech-to-Text
+- **Real-time Translation** – Translates non-English calls to English via Google Translate API
+- **Severity Analysis** – Keyword-based voice analysis model that marks severity as `critical`, `high`, `medium`, or `low`
+- **Responder Routing** – Automatically routes to the correct service (police, fire, ambulance) based on call content
+- **Call Summary** – Generates a structured severity report with location coordinates and a Google Maps link
+- **PostgreSQL Database** – Stores full call history with transcripts, translations, severity, responder type, GPS coordinates, and status
+- **Twilio Integration** – Webhooks for incoming calls and recordings via Twilio IVR
 
 ## Architecture
-Redline AI uses a modular pipeline architecture with six stages:
 
-1. **STT (Speech-to-Text)**: Transcribes audio to text
-   - Input: Raw audio bytes from emergency calls
-   - Output: `Transcript` object with text and metadata
-   - Converts spoken emergency calls into processable text
+```
+Incoming Call (Twilio)
+  │
+  ▼
+┌──────────────────────┐
+│  IVR Module          │
+│  - Greeting TwiML    │
+│  - Audio capture     │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│  Speech-to-Text      │
+│  (Google Cloud)      │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│  Translation         │
+│  (Google Translate)  │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐     ┌──────────────────────┐
+│  Severity Analysis   │────▶│  Responder Routing   │
+│  (Keyword Model)     │     │  (Police/Fire/Ambu.) │
+└──────────┬───────────┘     └──────────┬───────────┘
+           │                            │
+           ▼                            ▼
+┌──────────────────────────────────────────────────┐
+│  Summary Generator                               │
+│  - Severity report                               │
+│  - Location coordinates + map link               │
+└──────────────────────┬───────────────────────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │  PostgreSQL DB  │
+              │  (Call History) │
+              └─────────────────┘
+```
 
-2. **Emotion Analysis**: Analyzes emotional content
-   - Input: `Transcript` object
-   - Output: `EmotionAnalysis` object with emotion scores and detected states
-   - Evaluates caller's emotional state to assess urgency and stress levels
+## Tech Stack
 
-3. **Reasoning**: Applies contextual understanding
-   - Input: `EmotionAnalysis` object
-   - Output: `ReasoningOutput` object with extracted key information
-   - Identifies critical details like location, emergency type, and involved parties
+| Layer           | Technology                          |
+|-----------------|-------------------------------------|
+| Runtime         | Node.js                             |
+| Web Framework   | Express 5                           |
+| Database        | PostgreSQL (via `pg`)               |
+| Speech-to-Text  | Google Cloud Speech-to-Text         |
+| Translation     | Google Cloud Translation API (v2)   |
+| Telephony       | Twilio Programmable Voice           |
+| Testing         | Jest                                |
 
-4. **Severity Assessment**: Evaluates emergency priority
-   - Input: `ReasoningOutput` object
-   - Output: `SeverityAssessment` object with priority level and risk factors
-   - Determines urgency level for proper resource allocation
+## Getting Started
 
-5. **Safety Validation**: Performs safety checks
-   - Input: `SeverityAssessment` object
-   - Output: `SafetyOutput` object with validated information
-   - Ensures data quality and flags potential safety concerns
+### Prerequisites
 
-6. **Dispatch**: Generates actionable reports
-   - Input: `SafetyOutput` object
-   - Output: `DispatchReport` object with comprehensive emergency details
-   - Creates formatted dispatch reports for first responders
+- Node.js 18+
+- PostgreSQL 14+
+- Google Cloud project with Speech-to-Text and Translation APIs enabled
+- Twilio account (for telephony)
 
-Each stage is implemented as an independent agent that can be extended or replaced through the plugin system. Agents communicate through typed Pydantic models ensuring data validation at each step.
+### Installation
 
-## Contribution Guidelines
-We welcome contributions from the community! Here's how you can contribute:
-1. Fork the repository and create your branch:
-   ```bash
-   git checkout -b feature/YourFeature
-   ```
-2. Make your changes and commit them:
-   ```bash
-   git commit -m 'Add a new feature'
-   ```
-3. Push to your branch:
-   ```bash
-   git push origin feature/YourFeature
-   ```
-4. Open a pull request.
+```bash
+npm install
+```
 
-## Technology Stack
-- **Python 3.11+**: Core language
-- **FastAPI**: Web framework for the API
-- **Pydantic**: Data validation and serialization
-- **Redis**: In-memory data store for caching and session management
-- **PostgreSQL**: Database for persistent storage
-- **SQLAlchemy**: ORM for database interactions
-- **Uvicorn**: ASGI server
+### Configuration
 
-## Requirements
-### Runtime Requirements
-- **Python 3.11 or higher**: Required for core functionality
-- **Redis server** (optional for development): Used for caching and session management
-  - Recommended version: 5.0.1 or higher
-  - Development: The system can run without Redis for testing
-- **PostgreSQL database** (optional for development): Used for persistent storage in production
-  - Recommended version: 12.0 or higher
-  - Development: Not required for basic testing
+Copy the example environment file and fill in your credentials:
 
-### Development Requirements
-- All dependencies listed in `requirements.txt` or `pyproject.toml`
-- For the mock implementations included in the repository, no external AI service credentials are needed
-- Production deployments may require API keys for:
-  - Speech-to-Text services (if not using mock implementation)
-  - AI/ML inference services for emotion and reasoning stages
+```bash
+cp .env.example .env
+```
 
-### Optional
-- Docker and Docker Compose for containerized deployment
-- Environment variables for configuration (see docker-compose.yml for examples)
+| Variable                       | Description                         |
+|-------------------------------|-------------------------------------|
+| `PORT`                        | Server port (default: 3000)         |
+| `DATABASE_URL`                | PostgreSQL connection string        |
+| `TWILIO_ACCOUNT_SID`          | Twilio Account SID                  |
+| `TWILIO_AUTH_TOKEN`           | Twilio Auth Token                   |
+| `TWILIO_PHONE_NUMBER`         | Your Twilio phone number            |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP service account JSON |
+| `GOOGLE_PROJECT_ID`           | Google Cloud project ID             |
+
+### Database Setup
+
+Initialize the PostgreSQL `call_history` table:
+
+```bash
+npm run db:init
+```
+
+### Start the Server
+
+```bash
+npm start
+```
+
+### Run Tests
+
+```bash
+npm test
+```
+
+## API Endpoints
+
+| Method  | Endpoint                      | Description                              |
+|---------|-------------------------------|------------------------------------------|
+| GET     | `/health`                     | Health check                             |
+| POST    | `/api/calls/incoming`         | Twilio webhook – initial call greeting   |
+| POST    | `/api/calls/handle-recording` | Twilio webhook – process recorded audio  |
+| POST    | `/api/calls`                  | Submit a call for processing (REST)      |
+| GET     | `/api/calls`                  | List calls (filter by severity/responder)|
+| GET     | `/api/calls/:id`              | Get a single call record                 |
+| PATCH   | `/api/calls/:id/status`       | Update call status                       |
+
+## Database Schema
+
+```sql
+CREATE TABLE call_history (
+  id            UUID PRIMARY KEY,
+  caller_number VARCHAR(20)  NOT NULL,
+  timestamp     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  transcript    TEXT         NOT NULL,
+  language      VARCHAR(10),
+  translation   TEXT,
+  severity      VARCHAR(10)  NOT NULL,  -- low | medium | high | critical
+  responder     VARCHAR(20)  NOT NULL,  -- police | fire | ambulance | other
+  latitude      DOUBLE PRECISION,
+  longitude     DOUBLE PRECISION,
+  summary       TEXT         NOT NULL,
+  status        VARCHAR(20)  NOT NULL DEFAULT 'pending',
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+```
+
+## Project Structure
+
+```
+src/
+├── config/          # Environment & configuration
+├── db/              # PostgreSQL schema, queries & connection pool
+├── ivr/             # IVR call processing & speech-to-text
+├── translation/     # Google Translate API integration
+├── analysis/        # Severity marking (voice/text analysis)
+├── routing/         # Responder determination (fire/police/ambulance)
+├── summary/         # Call summary & severity report builder
+├── app.js           # Express routes
+└── server.js        # Entry point
+tests/               # Jest unit tests
+```
 
 ## License
-This project is part of the emergency response technology initiative.
+
+ISC
