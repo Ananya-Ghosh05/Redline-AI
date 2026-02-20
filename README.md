@@ -58,14 +58,38 @@ docker-compose up
 
 ## Architecture
 Redline AI uses a modular pipeline architecture with six stages:
-1. **STT (Speech-to-Text)**: Transcribes audio to text
-2. **Emotion Analysis**: Analyzes emotional content
-3. **Reasoning**: Applies contextual understanding
-4. **Severity Assessment**: Evaluates emergency priority
-5. **Safety Validation**: Performs safety checks
-6. **Dispatch**: Generates actionable reports
 
-Each stage is implemented as an independent agent that can be extended or replaced through the plugin system.
+1. **STT (Speech-to-Text)**: Transcribes audio to text
+   - Input: Raw audio bytes from emergency calls
+   - Output: `Transcript` object with text and metadata
+   - Converts spoken emergency calls into processable text
+
+2. **Emotion Analysis**: Analyzes emotional content
+   - Input: `Transcript` object
+   - Output: `EmotionAnalysis` object with emotion scores and detected states
+   - Evaluates caller's emotional state to assess urgency and stress levels
+
+3. **Reasoning**: Applies contextual understanding
+   - Input: `EmotionAnalysis` object
+   - Output: `ReasoningOutput` object with extracted key information
+   - Identifies critical details like location, emergency type, and involved parties
+
+4. **Severity Assessment**: Evaluates emergency priority
+   - Input: `ReasoningOutput` object
+   - Output: `SeverityAssessment` object with priority level and risk factors
+   - Determines urgency level for proper resource allocation
+
+5. **Safety Validation**: Performs safety checks
+   - Input: `SeverityAssessment` object
+   - Output: `SafetyOutput` object with validated information
+   - Ensures data quality and flags potential safety concerns
+
+6. **Dispatch**: Generates actionable reports
+   - Input: `SafetyOutput` object
+   - Output: `DispatchReport` object with comprehensive emergency details
+   - Creates formatted dispatch reports for first responders
+
+Each stage is implemented as an independent agent that can be extended or replaced through the plugin system. Agents communicate through typed Pydantic models ensuring data validation at each step.
 
 ## Contribution Guidelines
 We welcome contributions from the community! Here's how you can contribute:
@@ -93,9 +117,25 @@ We welcome contributions from the community! Here's how you can contribute:
 - **Uvicorn**: ASGI server
 
 ## Requirements
-- Python 3.11 or higher
-- Redis server
-- PostgreSQL database (for production deployments)
+### Runtime Requirements
+- **Python 3.11 or higher**: Required for core functionality
+- **Redis server** (optional for development): Used for caching and session management
+  - Recommended version: 5.0.1 or higher
+  - Development: The system can run without Redis for testing
+- **PostgreSQL database** (optional for development): Used for persistent storage in production
+  - Recommended version: 12.0 or higher
+  - Development: Not required for basic testing
+
+### Development Requirements
+- All dependencies listed in `requirements.txt` or `pyproject.toml`
+- For the mock implementations included in the repository, no external AI service credentials are needed
+- Production deployments may require API keys for:
+  - Speech-to-Text services (if not using mock implementation)
+  - AI/ML inference services for emotion and reasoning stages
+
+### Optional
+- Docker and Docker Compose for containerized deployment
+- Environment variables for configuration (see docker-compose.yml for examples)
 
 ## License
 This project is part of the emergency response technology initiative.
