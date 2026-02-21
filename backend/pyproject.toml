@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redline-ai"
+version = "0.1.0"
+description = "Emergency Response Intelligence Platform"
+authors = [
+    {name = "Redline AI Team"}
+]
+dependencies = [
+    "fastapi==0.104.1",
+    "uvicorn[standard]==0.24.0",
+    "pydantic==2.5.0",
+    "redis==5.0.1",
+    "sqlalchemy==2.0.23",
+    "psycopg2-binary==2.9.9",
+    "pytest==7.4.3",
+    "pytest-asyncio==0.21.1",
+    "python-multipart==0.0.6",
+    "httpx==0.25.2",
+    "respx==0.20.0"
+]
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
