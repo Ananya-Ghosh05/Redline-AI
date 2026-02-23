@@ -170,7 +170,4 @@ tests/               # Jest unit tests
 ```
 
 ## License
-
-ISC
-
-Minor README update for branch testing.
+This project is part of the emergency response technology initiative.
