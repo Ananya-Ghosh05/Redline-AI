@@ -35,10 +35,9 @@ structlog.configure(
     processors=[
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
+        structlog.dev.set_exc_info,
         structlog.processors.JSONRenderer(),
     ],
     wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
@@ -96,6 +95,35 @@ async def lifespan(app: FastAPI):
         )
         app.state.intent_loader = None
 
+    # 5. Whisper STT service (local, no paid API)
+    from app.services.whisper_service import WhisperService
+    import asyncio as _asyncio
+
+    whisper_svc = WhisperService(model_size=settings.WHISPER_MODEL_SIZE)
+    try:
+        # Whisper model loading is sync/CPU-bound – run in executor
+        loop = _asyncio.get_event_loop()
+        await loop.run_in_executor(None, whisper_svc.initialize)
+        app.state.whisper_service = whisper_svc
+        log.info("WhisperService initialised", model=settings.WHISPER_MODEL_SIZE)
+    except Exception as exc:
+        log.error(
+            "WhisperService failed to initialise – audio STT disabled",
+            exc=str(exc),
+        )
+        app.state.whisper_service = None
+
+    # 6. Create DB tables for MVP (idempotent; use Alembic for prod migrations)
+    from app.core.database import engine
+    from app.models.base import Base
+    import app.models  # noqa: F401 – ensure all models are registered
+
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        log.info("DB tables verified / created")
+    except Exception as exc:
+        log.error("DB table creation failed", exc=str(exc))
 
     log.info("Redline AI started", project=settings.PROJECT_NAME)
 
@@ -107,6 +135,8 @@ async def lifespan(app: FastAPI):
         await app.state.emotion_loader.shutdown()
     if getattr(app.state, "intent_loader", None) is not None:
         await app.state.intent_loader.shutdown()
+    if getattr(app.state, "whisper_service", None) is not None:
+        app.state.whisper_service.shutdown()
     log.info("Redline AI shut down cleanly")
 
 
@@ -164,11 +194,13 @@ async def health_check() -> dict:
     redis = get_redis_client()
     emo_loader = getattr(app.state, "emotion_loader", None)
     int_loader = getattr(app.state, "intent_loader", None)
+    whisper_svc = getattr(app.state, "whisper_service", None)
     return {
         "status": "ok",
         "redis": "connected" if redis else "disconnected",
         "emotion_model": "ready" if (emo_loader and emo_loader.is_ready()) else "unavailable",
         "intent_model": "ready" if (int_loader and int_loader.is_ready()) else "unavailable",
+        "whisper_model": "ready" if (whisper_svc and whisper_svc.is_ready()) else "unavailable",
         "database": "unchecked",
     }
 

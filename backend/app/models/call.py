@@ -14,7 +14,7 @@ class Call(TenantModel):
     caller_number = Column(String, index=True, nullable=False)
     status = Column(SQLEnum(CallStatus), default=CallStatus.active, nullable=False)
     
-    tenant = relationship("Tenant", back_populates="calls", foreign_keys="[Call.tenant_id]")
+    # tenant_id is inherited from TenantModel — access via self.tenant_id directly
     transcripts = relationship("Transcript", back_populates="call", cascade="all, delete")
     severity_reports = relationship("SeverityReport", back_populates="call", cascade="all, delete")
 

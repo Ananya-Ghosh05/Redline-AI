@@ -48,6 +48,11 @@ class Settings(BaseSettings):
         Path(__file__).resolve().parents[4] / "ml" / "intent_model.onnx"
     )
 
+    # ---- Whisper STT (local, no paid API) ---------------------------------
+    # Model size: tiny | base | small | medium | large
+    # "small" balances accuracy + speed on CPU.  Override via WHISPER_MODEL_SIZE env.
+    WHISPER_MODEL_SIZE: str = "small"
+
     # ---- CORS -----------------------------------------------------------
     # Comma-separated list of allowed origins, e.g.:
     #   ALLOWED_ORIGINS=https://app.redline.ai,https://admin.redline.ai

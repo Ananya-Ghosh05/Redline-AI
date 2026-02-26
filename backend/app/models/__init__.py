@@ -4,6 +4,7 @@ from app.models.user import User, RoleEnum
 from app.models.call import Call, Transcript, CallStatus
 from app.models.severity_report import SeverityReport
 from app.models.audit_log import AuditLog
+from app.models.emergency_call import EmergencyCall
 
 __all__ = [
     "Base",
@@ -16,5 +17,6 @@ __all__ = [
     "Transcript",
     "CallStatus",
     "SeverityReport",
-    "AuditLog"
+    "AuditLog",
+    "EmergencyCall",
 ]

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, DateTime, String
+from sqlalchemy import Column, DateTime, String, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, declared_attr
 
@@ -18,4 +18,4 @@ class TenantModel(BaseModel):
 
     @declared_attr
     def tenant_id(cls):
-        return Column(UUID(as_uuid=True), index=True, nullable=False)
+        return Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)

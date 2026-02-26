@@ -2,18 +2,29 @@ version: '3.8'
 
 services:
   app:
-    build: .
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://redis:6379
-      - POSTGRES_URL=postgresql://user:password@postgres/redline
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=redline
+      - WHISPER_MODEL_SIZE=small
+      - ENABLE_DOCS=true
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
-      - .:/app
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+      - ./backend:/app
+      - whisper_models:/root/.cache/whisper # persist downloaded Whisper weights
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   redis:
     image: redis:7-alpine
@@ -21,6 +32,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:15-alpine
@@ -32,7 +48,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d redline" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   redis_data:
   postgres_data:
+  whisper_models:

@@ -2,12 +2,23 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (ffmpeg + libsndfile1 for Whisper audio processing)
 RUN apt-get update && apt-get install -y \
     gcc \
+    ffmpeg \
+    libsndfile1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
+# ── Step 1: Install CPU-only PyTorch FIRST ──────────────────────────────────
+# This prevents openai-whisper from pulling the full CUDA build (~3 GB).
+# CPU torch is ~200 MB vs ~3 GB for the CUDA variant.
+RUN pip install --no-cache-dir \
+    torch==2.2.2 \
+    torchaudio==2.2.2 \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# ── Step 2: Install remaining Python dependencies ────────────────────────────
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -23,8 +34,8 @@ USER app
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=5 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
