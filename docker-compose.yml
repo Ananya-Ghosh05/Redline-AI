@@ -10,20 +10,26 @@ services:
       - POSTGRES_URL=postgresql+asyncpg://user:password@postgres/redline
       - SECRET_KEY=dev-secret-change-in-production
       - ML_SERVICE_URL=http://ml_service:8001
+    env_file:
+      - ./backend/.env
     depends_on:
       - redis
       - postgres
     volumes:
       - ./backend:/app
+      - ./ml:/app/ml
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   ml_service:
     build: ./backend
     ports:
       - "8001:8001"
+    env_file:
+      - ./backend/.env
     command: uvicorn ml_service.app:app --host 0.0.0.0 --port 8001 --reload
     volumes:
       - ./backend:/app
+      - ./ml:/app/ml
 
   redis:
     image: redis:7-alpine
