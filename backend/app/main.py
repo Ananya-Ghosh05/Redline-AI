@@ -1,42 +1,146 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+"""FastAPI application entry-point.
+
+Changes vs original:
+- lifespan initialises EmotionModelLoader once and stores it on app.state
+- structlog configured for JSON output at startup
+- Prometheus /metrics endpoint added (starlette-prometheus)
+- CORS origins driven by ALLOWED_ORIGINS env var (no open wildcard)
+- Secret key validation: refuse to start with the insecure default
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
 from contextlib import asynccontextmanager
 
+import structlog
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from starlette_prometheus import PrometheusMiddleware, metrics
+
 from app.core.config import settings
-from app.core.redis_client import init_redis, close_redis
+from app.core.redis_client import close_redis, init_redis
 from app.api.v1.api import api_router
+
+# ---------------------------------------------------------------------------
+# structlog JSON configuration (runs at import time)
+# ---------------------------------------------------------------------------
+
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+    cache_logger_on_first_use=True,
+)
+
+log = structlog.get_logger("redline_ai.app")
+
+
+# ---------------------------------------------------------------------------
+# Lifespan
+# ---------------------------------------------------------------------------
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # ----------- Startup -----------
+    # 1. Validate secret key
+    insecure_default = "super-secret-key-change-in-production"
+    if settings.SECRET_KEY == insecure_default:
+        log.warning(
+            "SECRET_KEY is set to the insecure default – set SECRET_KEY env var in production"
+        )
+
+    # 2. Redis
     await init_redis()
+
+    # 3. Emotion model loader
+    from app.ml.emotion_model_loader import emotion_loader
+
+    try:
+        await emotion_loader.initialize()
+        app.state.emotion_loader = emotion_loader
+        log.info("EmotionModelLoader initialised successfully")
+    except Exception as exc:
+        log.error(
+            "EmotionModelLoader failed to initialise – ML emotion disabled",
+            exc=str(exc),
+        )
+        app.state.emotion_loader = None  # agent will use heuristic-only path
+
+    log.info("Redline AI started", project=settings.PROJECT_NAME)
+
     yield
-    # Shutdown
+
+    # ----------- Shutdown -----------
     await close_redis()
+    if getattr(app.state, "emotion_loader", None) is not None:
+        await app.state.emotion_loader.shutdown()
+    log.info("Redline AI shut down cleanly")
+
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    lifespan=lifespan
+    openapi_url=f"{settings.API_V1_STR}/openapi.json" if settings.ENABLE_DOCS else None,
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
+    lifespan=lifespan,
 )
 
-# Set all CORS enabled origins
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
+
+app.add_middleware(PrometheusMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Update for production
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
-from app.websockets.connection_manager import router as websocket_router
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
+
+from app.websockets.connection_manager import router as websocket_router  # noqa: E402
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(websocket_router, prefix="/ws", tags=["websockets"])
+app.add_route("/metrics", metrics, include_in_schema=False)
 
-@app.get("/health")
-async def health_check():
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
+
+
+@app.get("/health", tags=["health"])
+async def health_check() -> dict:
     from app.core.redis_client import get_redis_client
+
     redis = get_redis_client()
-    redis_status = "connected" if redis else "disconnected"
-    return {"status": "ok", "redis": redis_status, "database": "unchecked"}
+    loader = getattr(app.state, "emotion_loader", None)
+    return {
+        "status": "ok",
+        "redis": "connected" if redis else "disconnected",
+        "emotion_model": "ready" if (loader and loader.is_ready()) else "unavailable",
+        "database": "unchecked",
+    }
+

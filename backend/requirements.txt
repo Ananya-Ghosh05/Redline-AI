@@ -1,15 +1,36 @@
+# ---- Core API -----------------------------------------------------------
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
+
+# ---- Database -----------------------------------------------------------
 sqlalchemy[asyncio]>=2.0.23
 asyncpg>=0.29.0
 alembic>=1.13.0
+
+# ---- Cache / Pub-Sub ----------------------------------------------------
 redis>=5.0.1
+
+# ---- Auth ---------------------------------------------------------------
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 python-multipart>=0.0.6
-python-json-logger>=2.0.7
+
+# ---- ML / ONNX ----------------------------------------------------------
+onnxruntime>=1.17.0         # CPU inference; swap for onnxruntime-gpu on GPU nodes
+numpy>=1.26.0
+
+# ---- Observability ------------------------------------------------------
+structlog>=24.1.0
+prometheus-client>=0.20.0
+starlette-prometheus>=0.9.0
+
+# ---- Resilience ---------------------------------------------------------
+pybreaker>=1.2.0
+
+# ---- Testing ------------------------------------------------------------
 pytest>=7.4.3
 pytest-asyncio>=0.21.1
 httpx>=0.25.2
+python-json-logger>=2.0.7
