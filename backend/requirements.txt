@@ -20,6 +20,9 @@ python-multipart>=0.0.6
 # ---- ML / ONNX ----------------------------------------------------------
 onnxruntime>=1.17.0         # CPU inference; swap for onnxruntime-gpu on GPU nodes
 numpy>=1.26.0
+transformers>=4.36.0
+optimum[onnxruntime]>=1.16.0
+tokenizers>=0.15.0
 
 # ---- Observability ------------------------------------------------------
 structlog>=24.1.0
@@ -29,8 +32,19 @@ starlette-prometheus>=0.9.0
 # ---- Resilience ---------------------------------------------------------
 pybreaker>=1.2.0
 
+# ---- Security -----------------------------------------------------------
+slowapi>=0.1.9
+twilio>=9.0.0
+
+# ---- Dashboard ----------------------------------------------------------
+jinja2>=3.1.0
+aiofiles>=23.0.0
+
 # ---- Testing ------------------------------------------------------------
 pytest>=7.4.3
 pytest-asyncio>=0.21.1
 httpx>=0.25.2
 python-json-logger>=2.0.7
+
+# ---- Load Testing -------------------------------------------------------
+locust>=2.20.0

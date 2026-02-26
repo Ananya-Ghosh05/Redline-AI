@@ -8,6 +8,7 @@ Run with:
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -190,20 +191,19 @@ class TestEmotionAgentFailures:
     async def test_circuit_open_returns_neutral_immediately(self):
         import pybreaker
         from app.agents.emotion.emotion_agent import _ml_breaker
-
+    
         original_state = _ml_breaker.current_state
         try:
-            # Force circuit open
-            _ml_breaker._state = pybreaker.CircuitBreakerState(
-                _ml_breaker, pybreaker.STATE_OPEN
-            )
+            # Force circuit open using official API
+            _ml_breaker.open()
+            
             agent = EmotionAgent(loader=_make_loader())
             result = await agent.process(_make_transcript("some text"))
             assert result.primary_emotion == EmotionType.NEUTRAL
             assert result.confidence == 0.0  # neutral fallback marker
         finally:
             # Restore original state
-            _ml_breaker._state = original_state
+            _ml_breaker.close()
 
     @pytest.mark.asyncio
     async def test_sequential_failures_trip_circuit(self):
@@ -211,8 +211,8 @@ class TestEmotionAgentFailures:
         import pybreaker
         from app.agents.emotion.emotion_agent import _ml_breaker
 
-        # Reset circuit
-        _ml_breaker.reset()
+        # Reset circuit using official API
+        _ml_breaker.close()
 
         loader = _make_loader(raises=RuntimeError("model broken"))
         agent = EmotionAgent(loader=loader)
@@ -221,29 +221,33 @@ class TestEmotionAgentFailures:
             result = await agent.process(_make_transcript("help"))
             assert isinstance(result, EmotionAnalysis)
 
-        # Circuit should now be OPEN or HALF_OPEN
-        assert _ml_breaker.current_state in {
-            pybreaker.STATE_OPEN,
-            pybreaker.STATE_HALF_OPEN,  # possible on fast machines
-        }
+        # Circuit should now be OPEN
+        assert _ml_breaker.current_state == pybreaker.STATE_OPEN
 
         # Clean up
-        _ml_breaker.reset()
+        _ml_breaker.close()
 
     @pytest.mark.asyncio
     async def test_both_tasks_timeout_returns_neutral(self):
         """Simulate both ML and heuristic exceeding budget."""
-        async def _slow_heuristic(*_a, **_kw):
-            await asyncio.sleep(10)
+        # Note: _heuristic_emotion is sync in the real code, 
+        # but _run_heuristic (which calls it) is async.
+        # Patching _heuristic_emotion to be slow.
+        
+        def _slow_heuristic(*_a, **_kw):
+            time.sleep(0.1) # Simulate slow sync block
             return _heuristic_emotion("text")
 
         loader = _make_loader(timeout=True)
         agent = EmotionAgent(loader=loader)
 
         with patch("app.agents.emotion.emotion_agent._INFERENCE_TIMEOUT_S", 0.05), \
-             patch("app.agents.emotion.emotion_agent._heuristic_emotion", _slow_heuristic):
+             patch("app.agents.emotion.emotion_agent._heuristic_emotion", side_effect=_slow_heuristic):
+            # This will trigger Stage 1 timeout and Stage 2 timeout
             result = await agent.process(_make_transcript("text"))
+        
         assert isinstance(result, EmotionAnalysis)
+        assert result.primary_emotion == EmotionType.NEUTRAL
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,10 @@ from starlette_prometheus import PrometheusMiddleware, metrics
 from app.core.config import settings
 from app.core.redis_client import close_redis, init_redis
 from app.api.v1.api import api_router
+from app.core.security import limiter
+
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 # ---------------------------------------------------------------------------
 # structlog JSON configuration (runs at import time)
@@ -66,6 +70,7 @@ async def lifespan(app: FastAPI):
 
     # 3. Emotion model loader
     from app.ml.emotion_model_loader import emotion_loader
+    from app.ml.intent_model_loader import IntentModelLoader
 
     try:
         await emotion_loader.initialize()
@@ -78,6 +83,20 @@ async def lifespan(app: FastAPI):
         )
         app.state.emotion_loader = None  # agent will use heuristic-only path
 
+    # 4. Intent model loader
+    intent_loader = IntentModelLoader()
+    try:
+        await intent_loader.initialize()
+        app.state.intent_loader = intent_loader
+        log.info("IntentModelLoader initialised successfully")
+    except Exception as exc:
+        log.error(
+            "IntentModelLoader failed to initialise – ML intent disabled",
+            exc=str(exc),
+        )
+        app.state.intent_loader = None
+
+
     log.info("Redline AI started", project=settings.PROJECT_NAME)
 
     yield
@@ -86,6 +105,8 @@ async def lifespan(app: FastAPI):
     await close_redis()
     if getattr(app.state, "emotion_loader", None) is not None:
         await app.state.emotion_loader.shutdown()
+    if getattr(app.state, "intent_loader", None) is not None:
+        await app.state.intent_loader.shutdown()
     log.info("Redline AI shut down cleanly")
 
 
@@ -105,6 +126,9 @@ app = FastAPI(
 # Middleware
 # ---------------------------------------------------------------------------
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(PrometheusMiddleware)
 
 app.add_middleware(
@@ -120,9 +144,11 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 from app.websockets.connection_manager import router as websocket_router  # noqa: E402
+from app.dashboard.routes import router as dashboard_router  # noqa: E402
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(websocket_router, prefix="/ws", tags=["websockets"])
+app.include_router(dashboard_router, tags=["dashboard"])
 app.add_route("/metrics", metrics, include_in_schema=False)
 
 
@@ -136,11 +162,13 @@ async def health_check() -> dict:
     from app.core.redis_client import get_redis_client
 
     redis = get_redis_client()
-    loader = getattr(app.state, "emotion_loader", None)
+    emo_loader = getattr(app.state, "emotion_loader", None)
+    int_loader = getattr(app.state, "intent_loader", None)
     return {
         "status": "ok",
         "redis": "connected" if redis else "disconnected",
-        "emotion_model": "ready" if (loader and loader.is_ready()) else "unavailable",
+        "emotion_model": "ready" if (emo_loader and emo_loader.is_ready()) else "unavailable",
+        "intent_model": "ready" if (int_loader and int_loader.is_ready()) else "unavailable",
         "database": "unchecked",
     }
 

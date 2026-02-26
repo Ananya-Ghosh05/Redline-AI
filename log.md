@@ -38,3 +38,47 @@ Replace the `MockEmotionAgent` with a production-ready ONNX ML integration, secu
    - *The Fix*: Added a `0.05s` stagger between requests to mimic real-world concurrent burst load, allowing Pybreaker's state mutations to propagate correctly. The test then passed perfectly.
 
 ---
+
+## 📅 2026-02-26: MVP 5-Phase Execution
+
+### 🎯 Objective
+Build the minimum complete MVP product in 5 structured phases: Intent Model, Intent Routing, Dashboard, Security, Load Testing.
+
+### ✅ Phase 1 — Intent Model (What Worked)
+1. **`IntentModelLoader` singleton** — Same architecture as `EmotionModelLoader` (ONNX, ThreadPool, startup init). Loaded DistilBERT via HuggingFace `optimum` with auto-ONNX export.
+2. **`IntentAgent`** — 500ms soft budget, circuit breaker, confidence threshold (0.6), keyword heuristic fallback. Same resilience patterns as `EmotionAgent`. **4/4 tests pass.**
+3. **Schemas** — `IntentType` 8-class enum + `IntentAnalysis` Pydantic model added to shared schemas.
+
+### ✅ Phase 2 — Intent Routing (What Worked)
+1. **`DispatchAgent`** — 3-tier routing: critical keyword override → intent-based → keyword fallback. Prometheus metrics for both routing paths.
+2. **`SeverityAgent` intent boost** — High-severity intents (`violent_crime`, `medical`, `fire`, `gas_hazard`) get +0.10 score boost when confidence ≥ 0.6.
+3. **9/9 dispatch tests pass**, 22/22 severity tests pass.
+
+### ❌ Phase 2 — What Didn't Work
+1. **Keyword fallback test failure**: Test text `"patient is bleeding"` didn't match ambulance keywords because `"bleeding"` wasn't in the dispatch fallback keyword list (only in severity keywords). **Fix**: Added `bleeding`, `injury`, `pain`, `medical` to the ambulance keyword list.
+
+### ✅ Phase 3 — Dashboard (What Worked)
+1. **`call_store.py`** — Thread-safe in-memory deque (max 100 calls). `add_call()` and `get_recent()`.
+2. **`routes.py`** — `GET /dashboard` serves HTML, `GET /api/v1/calls/live` returns JSON.
+3. **`index.html`** — Dark-themed dispatch console with auto-refresh (2s), stats row, severity-coded badges, responder indicators.
+
+### ✅ Phase 4 — Security (What Worked)
+1. **`security.py`** — `slowapi` rate limiter (60/min/IP), `require_jwt` dependency, Twilio webhook signature validation.
+2. **Rate limiter** wired into `main.py` via `app.state.limiter` and exception handler.
+3. **`/docs` already disabled** when `ENABLE_DOCS=false` (done in prior session).
+
+### ✅ Phase 5 — Load Testing (What Worked)
+1. **`locustfile.py`** — 20 randomized emergency transcripts, multipart file upload, configurable RPS.
+
+### 📊 Final Test Results
+**55/55 tests pass** in 1.35s:
+- `test_intent_agent.py`: 4 pass
+- `test_dispatch_agent.py`: 9 pass
+- `test_severity_agent.py`: 22 pass
+- `test_emotion_agent.py`: 20 pass
+
+### ⚠️ Known Issues
+1. **Legacy test files** (`test_agents.py`, `test_severity.py`) use old import paths (`agents.` instead of `app.agents.`). These predate our work and are not part of the MVP test suite.
+2. **Pyre2 lint errors** — All "Could not find import" errors are false positives due to Pyre2 not having the venv in its search path. All packages are installed and tests pass.
+
+---

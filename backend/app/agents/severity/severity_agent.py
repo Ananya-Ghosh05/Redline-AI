@@ -23,6 +23,7 @@ from app.core.schemas import (
     SeverityAssessment,
     SeverityLevel,
 )
+from app.core.schemas.intent import IntentType
 
 log = structlog.get_logger("redline_ai.agents.severity")
 
@@ -124,7 +125,7 @@ _LOW_KEYWORDS: frozenset[str] = frozenset(
 )
 
 _HIGH_RISK_KEYWORDS: frozenset[str] = frozenset(
-    ["violence", "weapon", "injury", "medical", "fire"]
+    ["violence", "weapon", "injury", "medical", "fire","gun",]
 )
 
 _URGENCY_KEYWORDS: frozenset[str] = frozenset(
@@ -132,9 +133,19 @@ _URGENCY_KEYWORDS: frozenset[str] = frozenset(
 )
 
 # Weights for the hybrid formula
-_W_KEYWORD: float = 0.4
-_W_EMOTION: float = 0.3
-_W_REASONING: float = 0.3
+# We give Keywords the highest weight (0.5) to ensure they drive the score.
+_W_KEYWORD: float = 0.5
+_W_EMOTION: float = 0.25
+_W_REASONING: float = 0.25
+
+# Intent classes that warrant a severity boost
+_HIGH_SEVERITY_INTENTS: frozenset[IntentType] = frozenset([
+    IntentType.VIOLENT_CRIME,
+    IntentType.MEDICAL,
+    IntentType.FIRE,
+    IntentType.GAS_HAZARD,
+])
+_INTENT_SEVERITY_BOOST: float = 0.10
 
 
 # ---------------------------------------------------------------------------
@@ -243,53 +254,73 @@ class SeverityAgent(BaseAgent):
         )
         keyword_text: str = str(input_data.metadata.get("keyword_text", input_data.context_summary))
 
+        # Intent signal from upstream IntentAgent
+        raw_intent: str = str(input_data.metadata.get("intent", IntentType.UNKNOWN.value))
+        intent_confidence: float = float(input_data.metadata.get("intent_confidence", 0.0))
+        try:
+            intent = IntentType(raw_intent)
+        except ValueError:
+            intent = IntentType.UNKNOWN
+
         kw_score = _keyword_score(keyword_text)
         r_score = _reasoning_score(input_data)
 
         # ---- Weight adjustment when emotion fallback was used ----
         # If emotion_confidence == 0 the ML result is meaningless;
-        # redistribute its weight equally to keyword and reasoning.
-        if emotion_confidence == 0.0:
-            w_kw = _W_KEYWORD + _W_EMOTION / 2
-            w_em = 0.0
-            w_re = _W_REASONING + _W_EMOTION / 2
+        # we redistribute its weight to Keyword and Reasoning.
+        if emotion_confidence <= 0.0:
+            kw_w = _W_KEYWORD + (_W_EMOTION / 2.0)
+            em_w = 0.0
+            r_w = _W_REASONING + (_W_EMOTION / 2.0)
         else:
-            # Partial confidence: scale emotion weight down proportionally.
-            em_weight = _W_EMOTION * emotion_confidence
-            redistributed = _W_EMOTION - em_weight
-            w_kw = _W_KEYWORD + redistributed / 2
-            w_em = em_weight
-            w_re = _W_REASONING + redistributed / 2
+            # Scale emotion weight by its confidence
+            em_w = _W_EMOTION * emotion_confidence
+            # Redistribute the remaining
+            gap = _W_EMOTION - em_w
+            kw_w = _W_KEYWORD + (gap / 2.0)
+            r_w = _W_REASONING + (gap / 2.0)
 
-        total_score = (
-            kw_score * w_kw
-            + emotion_intensity * w_em
-            + r_score * w_re
-        )
-        total_score = max(0.0, min(total_score, 1.0))
-        level = _score_to_level(total_score)
+        score = (kw_score * kw_w) + (emotion_intensity * em_w) + (r_score * r_w)
+
+        # ---- Intent Boost ------------------------------------------------
+        # If a high-confidence, high-severity intent is confirmed, boost score.
+        if intent in _HIGH_SEVERITY_INTENTS and intent_confidence >= 0.6:
+            boost = _INTENT_SEVERITY_BOOST * intent_confidence
+            score = min(score + boost, 1.0)
+            log.debug("Intent severity boost applied", intent=intent.value, boost=boost)
+
+        # ---- CRITICAL Floor ----------------------------------------------
+        # If we have a critical keyword match, we guarantee a CRITICAL level
+        # regardless of emotion/reasoning (safety first).
+        if kw_score >= 1.0:
+            score = max(score, 0.85)
+
+        score = max(0.0, min(1.0, score))
+        level = _score_to_level(score)
 
         factors: Dict[str, float] = {
             "keyword_score": kw_score,
-            "keyword_weight": w_kw,
+            "keyword_weight": kw_w,
             "emotion_intensity": emotion_intensity,
-            "emotion_weight": w_em,
+            "emotion_weight": em_w,
             "reasoning_score": r_score,
-            "reasoning_weight": w_re,
+            "reasoning_weight": r_w,
+            "intent_boost": _INTENT_SEVERITY_BOOST * intent_confidence if intent in _HIGH_SEVERITY_INTENTS else 0.0,
         }
 
         reasoning_text = (
-            f"Severity assessed as {level.value} (score={total_score:.3f}). "
-            f"Keyword={kw_score:.2f}×{w_kw:.2f}, "
-            f"Emotion={emotion_intensity:.2f}×{w_em:.2f} "
+            f"Severity assessed as {level.value} (score={score:.3f}). "
+            f"Keyword={kw_score:.2f}\u00d7{kw_w:.2f}, "
+            f"Emotion={emotion_intensity:.2f}\u00d7{em_w:.2f} "
             f"[confidence={emotion_confidence:.2f}], "
-            f"Reasoning={r_score:.2f}×{w_re:.2f}."
+            f"Reasoning={r_score:.2f}\u00d7{r_w:.2f}, "
+            f"Intent={intent.value} [conf={intent_confidence:.2f}]."
         )
 
         log.info(
             "SeverityAgent result",
             level=level.value,
-            score=total_score,
+            score=score,
             kw=kw_score,
             em=emotion_intensity,
             em_conf=emotion_confidence,
@@ -298,7 +329,7 @@ class SeverityAgent(BaseAgent):
 
         return SeverityAssessment(
             level=level,
-            score=total_score,
+            score=score,
             factors=factors,
             reasoning=reasoning_text,
             confidence=min((input_data.confidence + emotion_confidence) / 2.0, 1.0),

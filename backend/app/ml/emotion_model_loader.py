@@ -90,7 +90,11 @@ class EmotionModelLoader:
     def __init__(self) -> None:
         self._session: Optional[ort.InferenceSession] = None
         self._lock = threading.Lock()
-        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ort-worker")
+        # Bound workers to 2 to prevent thread starvation on smaller nodes.
+        self._executor = ThreadPoolExecutor(
+            max_workers=2, 
+            thread_name_prefix="onnx-inference"
+        )
         self._ready = False
 
     # ------------------------------------------------------------------

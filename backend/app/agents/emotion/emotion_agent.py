@@ -302,7 +302,7 @@ class EmotionAgent(BaseAgent):
     # ------------------------------------------------------------------
 
     async def process(self, input_data: Transcript) -> EmotionAnalysis:
-        """Process transcript → EmotionAnalysis.  Never raises."""
+        """Process transcript → EmotionAnalysis. Never raises."""
         text = input_data.text
         bound_log = log.bind(
             call_id=self._config.get("call_id", "unknown"),
@@ -316,61 +316,45 @@ class EmotionAgent(BaseAgent):
             bound_log.warning("Circuit breaker OPEN – returning neutral fallback")
             return _neutral_fallback(text)
 
-        # ---- Dual concurrent execution -----------------------------------
-        ml_task = asyncio.ensure_future(self._run_ml(text))
-        heuristic_task = asyncio.ensure_future(self._run_heuristic(text))
-
+        # ---- Prioritized ML Execution ------------------------------------
+        # We give ML a "soft budget" of 800ms before falling back.
+        # This prevents the instant heuristic from always winning (FIRST_COMPLETED risk).
+        ml_task = asyncio.create_task(self._run_ml(text))
+        
         try:
-            done, pending = await asyncio.wait(
-                {ml_task, heuristic_task},
-                timeout=_INFERENCE_TIMEOUT_S,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
+            # Stage 1: Wait for ML within the soft budget
+            ml_result = await asyncio.wait_for(asyncio.shield(ml_task), timeout=0.8)
+            if ml_result and ml_result.confidence >= _CONFIDENCE_THRESHOLD:
+                bound_log.info("ML inference successful within budget", confidence=ml_result.confidence)
+                return ml_result
+            elif ml_result:
+                bound_log.warning("ML inference had low confidence", confidence=ml_result.confidence)
+                # Fall through to heuristic
+        except asyncio.TimeoutError:
+            bound_log.warning("ML inference exceeding soft budget – transitioning to fallback")
         except Exception as exc:
-            bound_log.error("asyncio.wait failed unexpectedly", exc=str(exc))
-            for t in [ml_task, heuristic_task]:
-                t.cancel()
-            FALLBACK_USAGE_COUNT.labels(trigger="initial_fallback").inc()
+            bound_log.error("ML inference failed early", error=str(exc))
+
+        # Stage 2: Fallback to Heuristic
+        # We still keep the hard 3s limit for the whole stage.
+        try:
+            heuristic_result = await asyncio.wait_for(
+                self._run_heuristic(text), 
+                timeout=2.0 # Remaining time
+            )
+            
+            # If ML task eventually finishes while we were doing heuristic, we could log it
+            # but for emergency responsiveness, we return heuristic now.
+            FALLBACK_USAGE_COUNT.labels(trigger="ml_slow_or_failure").inc()
+            return heuristic_result
+            
+        except Exception as exc:
+            bound_log.error("Heuristic fallback failed", error=str(exc))
+            FALLBACK_USAGE_COUNT.labels(trigger="total_failure").inc()
             return _neutral_fallback(text)
-
-        # Cancel the slow one
-        for t in pending:
-            t.cancel()
-
-        # Prefer ML result if it completed first and is good
-        result: Optional[EmotionAnalysis] = None
-
-        if ml_task in done:
-            try:
-                result = ml_task.result()
-            except Exception:
-                result = None  # already logged + circuit tripped inside _run_ml
-
-        if result is None:
-            # Use heuristic if it completed
-            if heuristic_task in done:
-                try:
-                    result = heuristic_task.result()
-                    FALLBACK_USAGE_COUNT.labels(trigger="ml_failure").inc()
-                    bound_log.info("Returning heuristic fallback")
-                except Exception as exc:
-                    bound_log.error("Heuristic also failed", exc=str(exc))
-                    result = _neutral_fallback(text)
-                    FALLBACK_USAGE_COUNT.labels(trigger="initial_fallback").inc()
-            else:
-                # Both timed out
-                ML_FAILURE_COUNT.labels(reason="timeout").inc()
-                FALLBACK_USAGE_COUNT.labels(trigger="primary_timeout").inc()
-                bound_log.warning("Both ML and heuristic timed out – neutral fallback")
-                result = _neutral_fallback(text)
-
-        bound_log.info(
-            "EmotionAgent result",
-            primary=result.primary_emotion.value,
-            intensity=result.intensity,
-            confidence=result.confidence,
-        )
-        return result
+        finally:
+            if not ml_task.done():
+                ml_task.cancel()
 
     # ------------------------------------------------------------------
     # Internal coroutines

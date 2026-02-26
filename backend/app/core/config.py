@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     EMOTION_ONNX_PATH: str = str(
         Path(__file__).resolve().parents[4] / "ml" / "emotion_model.onnx"
     )
+    
+    INTENT_MODEL_NAME: str = "distilbert-base-uncased"
+    INTENT_ONNX_PATH: str = str(
+        Path(__file__).resolve().parents[4] / "ml" / "intent_model.onnx"
+    )
 
     # ---- CORS -----------------------------------------------------------
     # Comma-separated list of allowed origins, e.g.:
