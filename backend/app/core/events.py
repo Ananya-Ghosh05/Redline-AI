@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 from app.core.redis_client import get_redis_client
 
@@ -22,7 +23,7 @@ async def publish_call_event(call_id: UUID, event_type: str, payload: dict):
     message = {
         "event_type": event_type,
         "call_id": str(call_id),
-        "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "payload": payload,
     }
 

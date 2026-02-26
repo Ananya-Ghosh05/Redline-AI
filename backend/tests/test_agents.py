@@ -3,14 +3,14 @@
 import pytest
 from pydantic import ValidationError
 
-from agents.stt.mock_stt_agent import MockSTTAgent
-from agents.emotion.mock_emotion_agent import MockEmotionAgent
-from agents.reasoning.mock_reasoning_agent import MockReasoningAgent
-from agents.severity.severity_agent import SeverityAgent
-from agents.safety.mock_safety_agent import MockSafetyAgent
-from agents.dispatch.mock_dispatch_agent import MockDispatchAgent
+from app.agents.stt.mock_stt_agent import MockSTTAgent
+from app.agents.emotion.mock_emotion_agent import MockEmotionAgent
+from app.agents.reasoning.mock_reasoning_agent import MockReasoningAgent
+from app.agents.severity.severity_agent import SeverityAgent
+from app.agents.safety.mock_safety_agent import MockSafetyAgent
+from app.agents.dispatch.mock_dispatch_agent import MockDispatchAgent
 
-from core.schemas import (
+from app.core.schemas import (
     Transcript,
     EmotionAnalysis,
     ReasoningOutput,

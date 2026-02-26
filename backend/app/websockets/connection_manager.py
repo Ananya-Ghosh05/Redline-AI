@@ -1,4 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+import asyncio
 import json
 import logging
 from typing import Dict
@@ -42,14 +43,29 @@ manager = ConnectionManager()
 
 @router.websocket("/calls/{call_id}")
 async def websocket_endpoint(websocket: WebSocket, call_id: str):
-    # TODO: Add authentication based on token parameter, as headers don't pass naturally via standard JS WebSocket
-    
+    # Authenticate via query parameter token (standard JS WebSocket can't set headers)
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Missing authentication token")
+        return
+
+    try:
+        from jose import jwt, JWTError
+        from app.core.config import settings
+        from app.core.security import ALGORITHM
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        # Token is valid — proceed with connection
+        logger.info(f"WebSocket authenticated for call {call_id}, user={payload.get('sub')}")
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+        return
+
     await manager.connect(websocket, call_id)
     
     redis = get_redis_client()
     if not redis:
-        logger.error("Redis not initialized for webosckets")
-        await manager.disconnect(websocket, call_id)
+        logger.error("Redis not initialized for websockets")
+        manager.disconnect(websocket, call_id)
         return
         
     pubsub = redis.pubsub()
@@ -71,7 +87,6 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
                 await manager.broadcast_to_call(call_id, simplified)
                 
             # Yield to other tasks
-            import asyncio
             await asyncio.sleep(0.01)
 
     except WebSocketDisconnect:

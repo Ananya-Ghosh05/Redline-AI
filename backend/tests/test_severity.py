@@ -1,8 +1,8 @@
 """Unit tests for severity logic."""
 
 import pytest
-from agents.severity.severity_agent import SeverityAgent
-from core.schemas import ReasoningOutput, SeverityLevel
+from app.agents.severity.severity_agent import SeverityAgent
+from app.core.schemas import ReasoningOutput, SeverityLevel
 
 
 class TestSeverityScoring:

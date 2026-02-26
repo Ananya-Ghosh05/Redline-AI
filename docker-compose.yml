@@ -2,18 +2,28 @@ version: '3.8'
 
 services:
   app:
-    build: .
+    build: ./backend
     ports:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://redis:6379
-      - POSTGRES_URL=postgresql://user:password@postgres/redline
+      - POSTGRES_URL=postgresql+asyncpg://user:password@postgres/redline
+      - SECRET_KEY=dev-secret-change-in-production
+      - ML_SERVICE_URL=http://ml_service:8001
     depends_on:
       - redis
       - postgres
     volumes:
-      - .:/app
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  ml_service:
+    build: ./backend
+    ports:
+      - "8001:8001"
+    command: uvicorn ml_service.app:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./backend:/app
 
   redis:
     image: redis:7-alpine

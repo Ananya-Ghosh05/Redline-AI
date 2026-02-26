@@ -8,11 +8,24 @@ from app.services.call_processing import CallProcessor
 
 logger = logging.getLogger("redline_ai.event")
 
+# Events that should NEVER trigger re-processing (to prevent infinite loops)
+_IGNORE_EVENTS = {
+    "PROCESSING_STARTED",
+    "ML_ANALYSIS_COMPLETE",
+    "SEVERITY_UPDATED",
+    "LOCATION_RESOLVED",
+    "DISPATCH_RECOMMENDED",
+}
+
 
 def start_event_listener():
     """Create a background task that listens to the global Redis channel and reacts to events.
 
     This should be called during application startup.
+
+    IMPORTANT: Only TRANSCRIPT_RECEIVED events trigger the processing pipeline.
+    The pipeline itself publishes PROCESSING_STARTED (not TRANSCRIPT_RECEIVED)
+    to avoid an infinite publish-subscribe loop.
     """
 
     async def _listener():
@@ -36,9 +49,13 @@ def start_event_listener():
                     call_id = data.get("call_id")
                     payload = data.get("payload", {})
 
-                    # we only process transcripts events here to avoid loops
+                    # Safety guard: skip events that the pipeline itself produces
+                    if event in _IGNORE_EVENTS:
+                        continue
+
+                    # Only process transcript-received events
                     if event == "TRANSCRIPT_RECEIVED":
-                        # run processing pipeline for this call in background
+                        logger.info(f"Processing TRANSCRIPT_RECEIVED for call {call_id}")
                         async with AsyncSessionLocal() as db:
                             try:
                                 await processor.process_transcript(
@@ -55,6 +72,7 @@ def start_event_listener():
                 logger.error(f"Event listener error: {e}")
                 await asyncio.sleep(1)
 
-    # schedule the listener in the event loop
-    loop = asyncio.get_event_loop()
+    # schedule the listener in the running event loop (Python 3.10+ safe)
+    loop = asyncio.get_running_loop()
     loop.create_task(_listener())
+

@@ -2,8 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Protocol
-from pathlib import Path
+from typing import Any, Dict, Optional
 
 from ..agents.base import BaseAgent
 from ..plugins.registry import PluginRegistry
@@ -15,8 +14,8 @@ from ..core.schemas import (
     SafetyOutput,
     DispatchReport,
 )
-    """Output from safety agent - to be defined properly."""
-    pass  # Placeholder
+
+logger = logging.getLogger(__name__)
 
 
 class Orchestrator:

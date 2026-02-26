@@ -3,3 +3,25 @@ node_modules/
 coverage/
 *.log
 dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+venv/
+.venv/
+*.pt
+*.pth
+*.onnx
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
