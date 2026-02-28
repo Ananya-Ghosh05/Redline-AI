@@ -5,6 +5,8 @@ from sqlalchemy import select
 
 from app.services.base import CRUDBase
 from app.models.call import Call, Transcript
+from app.models.analysis_result import AnalysisResult
+from app.models.dispatch_recommendation import DispatchRecommendation
 from app.schemas.call import CallCreate, CallUpdate
 from app.schemas.transcript import TranscriptCreate
 
@@ -36,3 +38,19 @@ class CRUDTranscript(CRUDBase):
         return result.scalars().all()
 
 transcript = CRUDTranscript(Transcript)
+
+# New CRUD for analysis results
+class CRUDAnalysis(CRUDBase):
+    async def get_by_call(self, db: AsyncSession, *, call_id: UUID):
+        result = await db.execute(select(AnalysisResult).where(AnalysisResult.call_id == call_id))
+        return result.scalars().all()
+
+analysis_result = CRUDAnalysis(AnalysisResult)
+
+# New CRUD for dispatch recommendations
+class CRUDDispatch(CRUDBase):
+    async def get_by_call(self, db: AsyncSession, *, call_id: UUID):
+        result = await db.execute(select(DispatchRecommendation).where(DispatchRecommendation.call_id == call_id))
+        return result.scalars().all()
+
+dispatch = CRUDDispatch(DispatchRecommendation)

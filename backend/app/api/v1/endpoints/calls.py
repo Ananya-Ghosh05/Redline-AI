@@ -75,28 +75,24 @@ async def add_transcript(
     if call.tenant_id != tenant_id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
         
-    # Mock Translation Hooks
-    translated_text = transcript_in.original_text
-
-    transcript = await call_service.transcript.create(
-        db, 
-        obj_in={
-            "call_id": call_id,
-            "original_text": transcript_in.original_text,
-            "translated_text": translated_text,
-            "language": transcript_in.language,
-            "tenant_id": tenant_id
-        }
-    )
-    
-    # Store in Redis Cache (Simulated Streaming)
+    # process the transcript through the new Stage2 pipeline
+    from app.services.call_processing import CallProcessor
     from app.core.redis_client import get_redis_client
-    from app.core.events import publish_call_event
-    
+
+    processor = CallProcessor()
+
+    # only store transcript and emit event; further processing handled asynchronously
+    transcript = await processor.save_transcript(
+        db=db,
+        call_id=call_id,
+        transcript_text=transcript_in.original_text,
+        language=transcript_in.language,
+        tenant_id=tenant_id,
+    )
+
+    # cache latest transcript for convenience
     redis = get_redis_client()
     if redis:
         await redis.set(f"call:{call_id}:latest_transcript", transcript.model_dump_json(), ex=3600)
-        
-    await publish_call_event(call_id, "transcript_added", transcript.model_dump(mode="json"))
 
     return transcript

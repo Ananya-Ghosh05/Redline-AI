@@ -17,6 +17,8 @@ class Call(TenantModel):
     # tenant_id is inherited from TenantModel — access via self.tenant_id directly
     transcripts = relationship("Transcript", back_populates="call", cascade="all, delete")
     severity_reports = relationship("SeverityReport", back_populates="call", cascade="all, delete")
+    analysis_results = relationship("AnalysisResult", back_populates="call", cascade="all, delete")
+    dispatch_recommendations = relationship("DispatchRecommendation", back_populates="call", cascade="all, delete")
 
 class Transcript(TenantModel):
     __tablename__ = "transcripts"

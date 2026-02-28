@@ -2,20 +2,16 @@ version: '3.8'
 
 services:
   app:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     ports:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://redis:6379
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_SERVER=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=redline
-      - WHISPER_MODEL_SIZE=small
-      - ENABLE_DOCS=true
+      - POSTGRES_URL=postgresql+asyncpg://user:password@postgres/redline
+      - SECRET_KEY=dev-secret-change-in-production
+      - ML_SERVICE_URL=http://ml_service:8001
+    env_file:
+      - ./backend/.env
     depends_on:
       redis:
         condition: service_healthy
@@ -23,8 +19,19 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-      - whisper_models:/root/.cache/whisper # persist downloaded Whisper weights
+      - ./ml:/app/ml
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  ml_service:
+    build: ./backend
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/.env
+    command: uvicorn ml_service.app:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./backend:/app
+      - ./ml:/app/ml
 
   redis:
     image: redis:7-alpine
@@ -57,4 +64,3 @@ services:
 volumes:
   redis_data:
   postgres_data:
-  whisper_models:

@@ -39,22 +39,23 @@ def calculate_keywords(transcript_text: str):
             
     return score, detected
 
+
+# reuse the more advanced severity engine from services
+from app.services.severity_engine import SeverityEngine
+
+severity_engine = SeverityEngine()
+
 def severity_pipeline(transcript: str, voice_features: Any = None, rag_context: Any = None):
-    """
-    Pluggable severity scoring pipeline.
-    Currently implements weighted keyword scoring. Wait for Phase 3 for full ML pipeline.
-    """
+    """Fallback keyword-based pipeline for legacy compatibility. """
     score, detected = calculate_keywords(transcript)
     
-    # Cap at 10
     final_score = min(score, 10)
-    
     category = "LOW"
     if final_score >= 7:
         category = "HIGH"
     elif final_score >= 4:
         category = "MEDIUM"
-        
+    
     return final_score, category, detected
 
 @router.post("/{call_id}/analyze", response_model=SeverityReportResponse)

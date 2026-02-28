@@ -2,8 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Protocol
-from pathlib import Path
+from typing import Any, Dict, Optional
 
 from ..agents.base import BaseAgent
 from ..plugins.registry import PluginRegistry
@@ -15,8 +14,8 @@ from ..core.schemas import (
     SafetyOutput,
     DispatchReport,
 )
-    """Output from safety agent - to be defined properly."""
-    pass  # Placeholder
+
+logger = logging.getLogger(__name__)
 
 
 class Orchestrator:
@@ -74,11 +73,16 @@ class Orchestrator:
                 logger.error("STT stage failed")
                 return None
 
-            # Step 2: Emotion - Analyze emotions in transcript
-            emotion_analysis = await self._execute_stage('emotion', transcript)
+            # Step 2: Emotion - Analyze emotions in audio
+            # Pass original audio_data to get real acoustic features
+            emotion_analysis = await self._execute_stage('emotion', audio_data)
             if not emotion_analysis:
                 logger.error("Emotion stage failed")
                 return None
+            
+            # Link transcript and emotion for reasoning
+            if hasattr(emotion_analysis, 'text_segments'):
+                emotion_analysis.text_segments = [transcript.text]
 
             # Step 3: Reasoning - Apply reasoning to emotion analysis
             reasoning_output = await self._execute_stage('reasoning', emotion_analysis)

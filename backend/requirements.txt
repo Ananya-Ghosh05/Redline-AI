@@ -3,8 +3,7 @@ fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
-
-# ---- Database -----------------------------------------------------------
+email-validator>=2.1.0
 sqlalchemy[asyncio]>=2.0.23
 asyncpg>=0.29.0
 alembic>=1.13.0
@@ -48,7 +47,10 @@ aiofiles>=23.0.0
 pytest>=7.4.3
 pytest-asyncio>=0.21.1
 httpx>=0.25.2
-python-json-logger>=2.0.7
-
-# ---- Load Testing -------------------------------------------------------
-locust>=2.20.0
+respx>=0.20.0
+groq>=0.4.2
+openai-whisper>=20231117
+pydub>=0.25.1
+torch>=2.1.0
+torchaudio>=2.1.0
+soundfile>=0.12.1
