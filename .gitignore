@@ -3,3 +3,10 @@ node_modules/
 coverage/
 *.log
 dist/
+# Ignore raw source datasets
+datasets/Fire_Department_and_Emergency_Medical_Services_Dispatched_Calls_for_Service (2).csv
+datasets/Crime_Data_from_2020_to_Present.csv
+datasets/Suicide_Detection.csv
+datasets/Spill_Incidents.csv
+datasets/911.csv
+datasets/Spill_Incidents_from_July_1__2022_to_Recent_for_Download.csv
