@@ -9,4 +9,3 @@ class Tenant(BaseModel):
     name = Column(String, index=True, nullable=False)
     
     users = relationship("User", back_populates="tenant")
-    calls = relationship("Call", back_populates="tenant")

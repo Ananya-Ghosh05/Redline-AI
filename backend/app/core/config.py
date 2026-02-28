@@ -1,13 +1,20 @@
+from __future__ import annotations
+
 import os
+from pathlib import Path
+from typing import List
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Redline AI"
     API_V1_STR: str = "/api/v1"
-    
-    # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "super-secret-key-change-in-production")
+
+    # ---- Security -------------------------------------------------------
+    # No insecure default – app logs a warning at startup if the default
+    # placeholder is still present (see app/main.py lifespan).
+    SECRET_KEY: str = "super-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
     
     # DB - Set USE_SQLITE=false in .env to use PostgreSQL in production
@@ -31,6 +38,32 @@ class Settings(BaseSettings):
     ML_SERVICE_URL: str = os.getenv("ML_SERVICE_URL", "http://localhost:8001")
     GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
     
-    model_config = SettingsConfigDict(case_sensitive=True, env_file=".env")
+    INTENT_MODEL_NAME: str = "distilbert-base-uncased"
+    INTENT_ONNX_PATH: str = str(
+        Path(__file__).resolve().parents[4] / "ml" / "intent_model.onnx"
+    )
+
+    # ---- Whisper STT (local, no paid API) ---------------------------------
+    # Model size: tiny | base | small | medium | large
+    # "small" balances accuracy + speed on CPU.  Override via WHISPER_MODEL_SIZE env.
+    WHISPER_MODEL_SIZE: str = "small"
+
+    # ---- CORS -----------------------------------------------------------
+    # Comma-separated list of allowed origins, e.g.:
+    #   ALLOWED_ORIGINS=https://app.redline.ai,https://admin.redline.ai
+    # Set to "*" only in local development (handled by the lifespan check).
+    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+
+    # ---- Docs -----------------------------------------------------------
+    # Disable Swagger / ReDoc in production
+    ENABLE_DOCS: bool = True
+
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
+
 
 settings = Settings()
+

@@ -6,6 +6,7 @@ from app.models.severity_report import SeverityReport
 from app.models.analysis_result import AnalysisResult
 from app.models.dispatch_recommendation import DispatchRecommendation
 from app.models.audit_log import AuditLog
+from app.models.emergency_call import EmergencyCall
 
 __all__ = [
     "Base",

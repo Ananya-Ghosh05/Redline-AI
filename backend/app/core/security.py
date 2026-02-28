@@ -5,7 +5,20 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+log = structlog.get_logger("redline_ai.security")
+
+# ---------------------------------------------------------------------------
+# Rate Limiter
+# ---------------------------------------------------------------------------
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
+# ---------------------------------------------------------------------------
+# JWT Auth
+# ---------------------------------------------------------------------------
+
+_bearer_scheme = HTTPBearer(auto_error=False)
+
 ALGORITHM = "HS256"
 
 def create_access_token(

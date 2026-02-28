@@ -6,6 +6,7 @@ from .reasoning import ReasoningOutput
 from .severity import SeverityAssessment, SeverityLevel
 from .safety import SafetyOutput, SafetyStatus
 from .dispatch_report import DispatchReport, DispatchAction
+from .intent import IntentType, IntentAnalysis
 
 __all__ = [
     "Transcript",
@@ -18,4 +19,6 @@ __all__ = [
     "SafetyStatus",
     "DispatchReport",
     "DispatchAction",
+    "IntentType",
+    "IntentAnalysis",
 ]

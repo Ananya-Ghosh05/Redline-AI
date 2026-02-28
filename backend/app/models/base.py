@@ -24,4 +24,4 @@ class TenantModel(BaseModel):
 
     @declared_attr
     def tenant_id(cls):
-        return Column(UUID(as_uuid=True), index=True, nullable=False)
+        return Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)
