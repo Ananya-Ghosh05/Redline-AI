@@ -170,4 +170,7 @@ tests/               # Jest unit tests
 ```
 
 ## License
+
+ISC
+
 This project is part of the emergency response technology initiative.

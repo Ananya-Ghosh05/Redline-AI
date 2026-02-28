@@ -66,67 +66,9 @@ async def lifespan(app: FastAPI):
 
     # 2. Redis
     await init_redis()
-
-    # 3. Emotion model loader
-    from app.ml.emotion_model_loader import emotion_loader
-    from app.ml.intent_model_loader import IntentModelLoader
-
-    try:
-        await emotion_loader.initialize()
-        app.state.emotion_loader = emotion_loader
-        log.info("EmotionModelLoader initialised successfully")
-    except Exception as exc:
-        log.error(
-            "EmotionModelLoader failed to initialise – ML emotion disabled",
-            exc=str(exc),
-        )
-        app.state.emotion_loader = None  # agent will use heuristic-only path
-
-    # 4. Intent model loader
-    intent_loader = IntentModelLoader()
-    try:
-        await intent_loader.initialize()
-        app.state.intent_loader = intent_loader
-        log.info("IntentModelLoader initialised successfully")
-    except Exception as exc:
-        log.error(
-            "IntentModelLoader failed to initialise – ML intent disabled",
-            exc=str(exc),
-        )
-        app.state.intent_loader = None
-
-    # 5. Whisper STT service (local, no paid API)
-    from app.services.whisper_service import WhisperService
-    import asyncio as _asyncio
-
-    whisper_svc = WhisperService(model_size=settings.WHISPER_MODEL_SIZE)
-    try:
-        # Whisper model loading is sync/CPU-bound – run in executor
-        loop = _asyncio.get_event_loop()
-        await loop.run_in_executor(None, whisper_svc.initialize)
-        app.state.whisper_service = whisper_svc
-        log.info("WhisperService initialised", model=settings.WHISPER_MODEL_SIZE)
-    except Exception as exc:
-        log.error(
-            "WhisperService failed to initialise – audio STT disabled",
-            exc=str(exc),
-        )
-        app.state.whisper_service = None
-
-    # 6. Create DB tables for MVP (idempotent; use Alembic for prod migrations)
-    from app.core.database import engine
-    from app.models.base import Base
-    import app.models  # noqa: F401 – ensure all models are registered
-
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        log.info("DB tables verified / created")
-    except Exception as exc:
-        log.error("DB table creation failed", exc=str(exc))
-
-    log.info("Redline AI started", project=settings.PROJECT_NAME)
-
+    # begin background event subscriber
+    from app.core.event_listener import start_event_listener
+    start_event_listener()
     yield
 
     # ----------- Shutdown -----------
