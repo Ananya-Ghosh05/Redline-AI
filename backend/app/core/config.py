@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -10,12 +10,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Redline AI"
     API_V1_STR: str = "/api/v1"
+    APP_ENV: str = os.getenv("APP_ENV", "development")
 
     # ---- Security -------------------------------------------------------
     # No insecure default – app logs a warning at startup if the default
     # placeholder is still present (see app/main.py lifespan).
-    SECRET_KEY: str = "super-secret-key-change-in-production"
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
+    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
     
     # DB - Set USE_SQLITE=false in .env to use PostgreSQL in production
     USE_SQLITE: bool = os.getenv("USE_SQLITE", "true").lower() == "true"
@@ -56,7 +58,7 @@ class Settings(BaseSettings):
 
     # ---- Docs -----------------------------------------------------------
     # Disable Swagger / ReDoc in production
-    ENABLE_DOCS: bool = True
+    ENABLE_DOCS: bool = os.getenv("ENABLE_DOCS", "true").lower() == "true"
 
     model_config = SettingsConfigDict(
         case_sensitive=True,

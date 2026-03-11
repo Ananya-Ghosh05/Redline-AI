@@ -1,22 +1,27 @@
 """Dashboard routes — GET /dashboard and GET /api/v1/calls/live."""
 from __future__ import annotations
 
-from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
 from pathlib import Path
+
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 from app.dashboard import call_store
 
 router = APIRouter()
 
-_TEMPLATE_PATH = Path(__file__).parent / "templates" / "index.html"
-_TEMPLATE: str = _TEMPLATE_PATH.read_text(encoding="utf-8")
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 @router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
-async def dashboard() -> HTMLResponse:
+async def dashboard(request: Request) -> HTMLResponse:
     """Serve the live dispatcher dashboard."""
-    return HTMLResponse(content=_TEMPLATE)
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={"title": "Redline AI Dispatch Dashboard"},
+    )
 
 
 @router.get("/api/v1/calls/live")

@@ -6,10 +6,16 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - USE_SQLITE=false
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=redline
       - REDIS_URL=redis://redis:6379
-      - POSTGRES_URL=postgresql+asyncpg://user:password@postgres/redline
       - SECRET_KEY=dev-secret-change-in-production
       - ML_SERVICE_URL=http://ml_service:8001
+      - WHISPER_MODEL_SIZE=small
     env_file:
       - ./backend/.env
     depends_on:

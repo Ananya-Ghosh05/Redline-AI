@@ -28,8 +28,8 @@ from app.core.schemas import Transcript
 from app.models.emergency_call import EmergencyCall
 from app.services.cache_service import cache_call
 from app.services.dispatch_service import select_responder
-from app.services.intent_service import classify_intent
 from app.services.severity_service import compute_severity
+from app.dashboard import call_store
 
 log = logging.getLogger("redline_ai.api.emergency")
 
@@ -55,6 +55,7 @@ class EmergencyResponse(BaseModel):
     call_id: str
     transcript: str
     intent: str
+    intent_confidence: float
     emotion: str
     severity: str
     responder: str
@@ -141,21 +142,35 @@ async def process_emergency(
     # 2. Run pipeline (intent + emotion in parallel, then severity + dispatch)
     # ------------------------------------------------------------------
 
-    intent_task = asyncio.create_task(classify_intent(transcript))
+    intent = "unknown"
+    intent_confidence = 0.0
+    intent_fallback = True
+    try:
+        from app.agents.intent.intent_agent import IntentAgent
+
+        intent_loader = getattr(request.app.state, "intent_loader", None)
+        intent_agent = IntentAgent(loader=intent_loader)
+        intent_result = await intent_agent.process(Transcript(text=transcript, confidence=1.0))
+        intent = intent_result.intent.value
+        intent_confidence = float(intent_result.confidence)
+        intent_fallback = bool(intent_result.fallback_used)
+    except Exception as exc:
+        log.warning("IntentAgent failed, using unknown fallback: %s", exc)
 
     emotion_label = "neutral"
-    emotion_loader = getattr(request.app.state, "emotion_loader", None)
-    if emotion_loader is not None:
-        try:
-            from app.agents.emotion.emotion_agent import EmotionAgent
+    emotion_confidence = 0.0
+    emotion_fallback = True
+    try:
+        from app.agents.emotion.emotion_agent import EmotionAgent
 
-            agent = EmotionAgent(loader=emotion_loader)
-            emotion_result = await agent.process(Transcript(text=transcript))
-            emotion_label = emotion_result.primary_emotion.value
-        except Exception as exc:
-            log.warning("EmotionAgent failed, using neutral fallback: %s", exc)
-
-    intent = await intent_task
+        emotion_loader = getattr(request.app.state, "emotion_loader", None)
+        agent = EmotionAgent(loader=emotion_loader)
+        emotion_result = await agent.process(Transcript(text=transcript, confidence=1.0))
+        emotion_label = emotion_result.primary_emotion.value
+        emotion_confidence = float(emotion_result.confidence)
+        emotion_fallback = emotion_confidence <= 0.0
+    except Exception as exc:
+        log.warning("EmotionAgent failed, using neutral fallback: %s", exc)
 
     severity = await compute_severity(transcript, emotion_label)
     responder = await select_responder(intent, severity)
@@ -197,6 +212,7 @@ async def process_emergency(
         "caller_id": caller_id,
         "transcript": transcript,
         "intent": intent,
+        "intent_confidence": intent_confidence,
         "emotion": emotion_label,
         "severity": severity,
         "responder": responder,
@@ -204,6 +220,22 @@ async def process_emergency(
     }
     asyncio.create_task(
         cache_call(get_redis_client(), str(call_id), call_data)
+    )
+
+    fallback_used = intent_fallback or emotion_fallback
+    call_store.add_call(
+        transcript=transcript,
+        intent=intent,
+        intent_confidence=intent_confidence,
+        emotion=emotion_label,
+        emotion_confidence=emotion_confidence,
+        severity=severity,
+        severity_score=0.0,
+        responder=responder,
+        fallback_used=fallback_used,
+        intent_fallback=intent_fallback,
+        emotion_fallback=emotion_fallback,
+        latency_ms=float(latency_ms),
     )
 
     # ------------------------------------------------------------------
@@ -214,6 +246,7 @@ async def process_emergency(
         call_id=str(call_id),
         transcript=transcript,
         intent=intent,
+        intent_confidence=intent_confidence,
         emotion=emotion_label,
         severity=severity,
         responder=responder,

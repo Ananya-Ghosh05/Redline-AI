@@ -21,5 +21,6 @@ __all__ = [
     "SeverityReport",
     "AnalysisResult",
     "DispatchRecommendation",
-    "AuditLog"
+    "AuditLog",
+    "EmergencyCall",
 ]
