@@ -2,20 +2,23 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| Version | Supported |
+|---------|-----------|
+| 1.x     | Yes       |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+To report a security vulnerability, open a GitHub issue with the label `security` or contact the maintainer directly via the repository's GitHub profile.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Please include a description of the issue, steps to reproduce it, and any relevant environment details. You can expect an initial response within 5 business days.
+
+Accepted vulnerabilities will be patched in a follow-up release. Declined reports will include an explanation.
+
+## Security Considerations
+
+- The `SECRET_KEY` environment variable must be set to a strong random value before deployment. The application will refuse to start if this variable is empty.
+- Wildcard CORS origins (`*`) are rejected at startup. Set `ALLOWED_ORIGINS` to explicit origins.
+- Swagger and ReDoc are disabled when `APP_ENV=production`. Set `ENABLE_DOCS=false` if needed.
+- All routes under `/api/v1` require a valid JWT bearer token.
+- Twilio webhook requests are validated using the Twilio auth token signature.
+- Rate limiting is enforced on all endpoints via SlowAPI.
