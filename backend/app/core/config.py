@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     
     INTENT_MODEL_NAME: str = "distilbert-base-uncased"
     INTENT_ONNX_PATH: str = str(
-        Path(__file__).resolve().parents[4] / "ml" / "intent_model.onnx"
+        Path(__file__).resolve().parents[2] / "ml" / "intent_model.onnx"
     )
 
     # ---- Whisper STT (local, no paid API) ---------------------------------

@@ -1,6 +1,10 @@
 # ---- Core API -----------------------------------------------------------
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
+gunicorn>=21.2.0
+
+# ---- Task queue ---------------------------------------------------------
+celery>=5.3.6
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
 email-validator>=2.1.0
@@ -18,7 +22,7 @@ python-multipart>=0.0.6
 
 # ---- ML / ONNX ----------------------------------------------------------
 onnxruntime>=1.17.0         # CPU inference; swap for onnxruntime-gpu on GPU nodes
-numpy>=1.26.0
+numpy>=1.26.0,<2.0
 transformers>=4.36.0
 optimum[onnxruntime]>=1.16.0
 tokenizers>=0.15.0

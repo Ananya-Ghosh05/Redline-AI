@@ -15,7 +15,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - SECRET_KEY=dev-secret-change-in-production
       - ML_SERVICE_URL=http://ml_service:8001
-      - WHISPER_MODEL_SIZE=small
+      - WHISPER_MODEL_SIZE=tiny
     env_file:
       - ./backend/.env
     depends_on:
@@ -26,7 +26,36 @@ services:
     volumes:
       - ./backend:/app
       - ./ml:/app/ml
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: gunicorn app.main:app -c gunicorn.conf.py
+
+  celery_worker:
+    build: ./backend
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - USE_SQLITE=false
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=redline
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=dev-secret-change-in-production
+    env_file:
+      - ./backend/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./ml:/app/ml
+    healthcheck:
+      test: ["CMD", "ps", "aux"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   ml_service:
     build: ./backend
@@ -38,6 +67,12 @@ services:
     volumes:
       - ./backend:/app
       - ./ml:/app/ml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/docs", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
 
   redis:
     image: redis:7-alpine
@@ -67,6 +102,36 @@ services:
       timeout: 5s
       retries: 5
 
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./backend/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   redis_data:
   postgres_data:
+  prometheus_data:
+  grafana_data:

@@ -76,9 +76,9 @@ async def lifespan(app: FastAPI):
     # 2. Redis
     await init_redis()
 
-    # 3. Database schema (MVP bootstrap)
+    # 3. Database schema (MVP bootstrap — idempotent on restarts)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(lambda sync_conn: Base.metadata.create_all(sync_conn, checkfirst=True))
 
     # 4. Local Whisper STT model (CPU), loaded off the event loop
     whisper_service = WhisperService(model_size=settings.WHISPER_MODEL_SIZE)
