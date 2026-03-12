@@ -16,36 +16,48 @@ depends_on = None
 
 
 def upgrade():
+    # Ensure gen_random_uuid() is available
+    op.execute('CREATE EXTENSION IF NOT EXISTS pgcrypto')
+
     op.create_table(
         'analysis_results',
         sa.Column('id', UUID(as_uuid=True), primary_key=True, server_default=sa.text('gen_random_uuid()')),
-        sa.Column('created_at', sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column('updated_at', sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column('tenant_id', UUID(as_uuid=True), nullable=False, index=True),
-        sa.Column('call_id', UUID(as_uuid=True), sa.ForeignKey('calls.id', ondelete='CASCADE'), nullable=False, index=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column('tenant_id', UUID(as_uuid=True), nullable=False),
+        sa.Column('call_id', UUID(as_uuid=True), sa.ForeignKey('calls.id', ondelete='CASCADE'), nullable=False),
         sa.Column('incident_type', sa.String(), nullable=False),
         sa.Column('panic_score', sa.Float(), nullable=False),
         sa.Column('keyword_score', sa.Float(), nullable=False),
-        sa.Column('severity_prediction', sa.String(), nullable=True),
+        sa.Column('severity_prediction', sa.Integer(), nullable=True),
         sa.Column('location_text', sa.String(), nullable=True),
         sa.Column('latitude', sa.Float(), nullable=True),
         sa.Column('longitude', sa.Float(), nullable=True),
         sa.Column('geo_confidence', sa.Float(), nullable=True),
     )
+    op.create_index('ix_analysis_results_tenant_id', 'analysis_results', ['tenant_id'])
+    op.create_index('ix_analysis_results_call_id', 'analysis_results', ['call_id'])
+
     op.create_table(
         'dispatch_recommendations',
         sa.Column('id', UUID(as_uuid=True), primary_key=True, server_default=sa.text('gen_random_uuid()')),
-        sa.Column('created_at', sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column('updated_at', sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column('tenant_id', UUID(as_uuid=True), nullable=False, index=True),
-        sa.Column('call_id', UUID(as_uuid=True), sa.ForeignKey('calls.id', ondelete='CASCADE'), nullable=False, index=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column('tenant_id', UUID(as_uuid=True), nullable=False),
+        sa.Column('call_id', UUID(as_uuid=True), sa.ForeignKey('calls.id', ondelete='CASCADE'), nullable=False),
         sa.Column('unit_id', sa.String(), nullable=False),
         sa.Column('eta_minutes', sa.Float(), nullable=True),
         sa.Column('priority', sa.String(), nullable=False),
     )
+    op.create_index('ix_dispatch_recommendations_tenant_id', 'dispatch_recommendations', ['tenant_id'])
+    op.create_index('ix_dispatch_recommendations_call_id', 'dispatch_recommendations', ['call_id'])
 
 
 def downgrade():
+    op.drop_index('ix_dispatch_recommendations_call_id', table_name='dispatch_recommendations')
+    op.drop_index('ix_dispatch_recommendations_tenant_id', table_name='dispatch_recommendations')
     op.drop_table('dispatch_recommendations')
+    op.drop_index('ix_analysis_results_call_id', table_name='analysis_results')
+    op.drop_index('ix_analysis_results_tenant_id', table_name='analysis_results')
     op.drop_table('analysis_results')
 

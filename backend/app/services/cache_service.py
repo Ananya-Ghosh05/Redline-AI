@@ -28,8 +28,6 @@ async def cache_call(
     data: dict,
     ttl: int | None = None,
 ) -> None:
-    if ttl is None:
-        ttl = _default_ttl()
     """Persist call pipeline output to Redis with an expiry.
 
     Args:
@@ -38,6 +36,8 @@ async def cache_call(
         data:         Serialisable dict of call metadata.
         ttl:          Expiry in seconds (default 5 min).
     """
+    if ttl is None:
+        ttl = _default_ttl()
     if redis_client is None:
         log.warning("Redis not available – skipping call cache write for %s", call_id)
         return

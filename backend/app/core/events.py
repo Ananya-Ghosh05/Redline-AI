@@ -33,7 +33,7 @@ async def publish_call_event(call_id: UUID, event_type: str, payload: dict):
     global_channel = "redline.events.calls"
 
     try:
-        await redis.publish(per_channel, json.dumps(message))
-        await redis.publish(global_channel, json.dumps(message))
+        await redis.publish(per_channel, json.dumps(message, default=str))
+        await redis.publish(global_channel, json.dumps(message, default=str))
     except Exception as e:
         logger.error(f"Failed to publish event: {e}")

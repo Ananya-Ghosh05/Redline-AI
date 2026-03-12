@@ -33,3 +33,41 @@ async def select_responder(intent: str, severity: str) -> str:
         return "police"
 
     return "police"
+
+
+class DispatchService:
+    """Pipeline-compatible dispatch service backed by select_responder.
+
+    Provides the ``recommend()`` async API expected by ``CallProcessor``
+    without requiring the full DispatchAgent input schema.
+    """
+
+    async def recommend(
+        self,
+        severity_score: float,
+        incident_type: str,
+        geo: dict | None = None,
+    ) -> dict:
+        """Return a dispatch recommendation dict.
+
+        Args:
+            severity_score: Numeric severity on 0-10 scale from SeverityEngine.
+            incident_type:  Incident classification string (e.g. "medical").
+            geo:            Optional geocode result dict (unused by this impl).
+
+        Returns:
+            Dict with ``unit_id``, ``eta_minutes``, and ``priority`` keys.
+        """
+        if severity_score >= 7.0:
+            severity_band = "critical"
+        elif severity_score >= 4.0:
+            severity_band = "high"
+        else:
+            severity_band = "medium"
+
+        unit = await select_responder(incident_type, severity_band)
+        return {
+            "unit_id": unit,
+            "eta_minutes": None,
+            "priority": severity_band,
+        }

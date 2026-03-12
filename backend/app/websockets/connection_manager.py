@@ -1,11 +1,9 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
 import json
 import logging
 from typing import Dict
-from uuid import UUID
 
-from app.api.deps import get_current_user
 from app.core.redis_client import get_redis_client
 
 router = APIRouter()
@@ -54,10 +52,33 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
         from app.core.config import settings
         from app.core.security import ALGORITHM
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-        # Token is valid — proceed with connection
+        token_tenant_id = payload.get("tenant_id")
         logger.info(f"WebSocket authenticated for call {call_id}, user={payload.get('sub')}")
     except Exception:
         await websocket.close(code=4001, reason="Invalid or expired token")
+        return
+
+    # Authorize: verify the call belongs to the user's tenant
+    try:
+        from sqlalchemy import select
+        from app.core.database import AsyncSessionLocal
+        from app.models.call import Call
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Call).where(Call.id == call_id))
+            call = result.scalar_one_or_none()
+
+        if call is None:
+            await websocket.close(code=4004, reason="Call not found")
+            return
+
+        if token_tenant_id is None or str(call.tenant_id) != str(token_tenant_id):
+            await websocket.close(code=4003, reason="Forbidden: call does not belong to your tenant")
+            return
+
+    except Exception as e:
+        logger.error(f"WebSocket authorization error: {e}")
+        await websocket.close(code=4002, reason="Authorization check failed")
         return
 
     await manager.connect(websocket, call_id)
