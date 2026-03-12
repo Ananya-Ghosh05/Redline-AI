@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from app.agents.stt.mock_stt_agent import MockSTTAgent
 from app.agents.emotion.mock_emotion_agent import MockEmotionAgent
 from app.agents.reasoning.mock_reasoning_agent import MockReasoningAgent
-from app.agents.severity.severity_agent import SeverityAgent
+from app.agents.severity.severity_agent import SeverityAgent, _score_to_level
 from app.agents.safety.mock_safety_agent import MockSafetyAgent
 from app.agents.dispatch.mock_dispatch_agent import MockDispatchAgent
 
