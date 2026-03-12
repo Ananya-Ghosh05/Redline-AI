@@ -3,6 +3,11 @@ node_modules/
 coverage/
 *.log
 dist/
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
 # Ignore raw source datasets
 datasets/Fire_Department_and_Emergency_Medical_Services_Dispatched_Calls_for_Service (2).csv
 datasets/Crime_Data_from_2020_to_Present.csv
