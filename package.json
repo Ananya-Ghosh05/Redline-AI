@@ -1,7 +1,7 @@
 {
   "name": "redline-ai",
   "version": "1.0.0",
-  "description": "AI-powered IVR system for first responders with real-time translation, severity analysis, and responder routing",
+  "description": "AI-powered IVR system for emergency dispatch with local speech recognition, intent classification, severity analysis, and responder routing",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
