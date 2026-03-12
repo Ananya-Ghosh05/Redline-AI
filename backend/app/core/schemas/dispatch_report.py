@@ -20,6 +20,7 @@ class DispatchReport(BaseModel):
 
     action: DispatchAction = Field(..., description="Recommended action to take")
     priority: str = Field(..., description="Priority level (e.g., 'immediate', 'urgent', 'routine')")
+    responder: str = Field(default="police", description="Primary responder unit (ambulance | fire | police | other)")
     resources_required: List[str] = Field(default_factory=list, description="Required resources or services")
     location: Optional[str] = Field(None, description="Location information if available")
     estimated_response_time: Optional[str] = Field(None, description="Estimated response time")

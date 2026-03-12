@@ -1,104 +1,92 @@
-"""Security middleware and dependencies for Redline AI.
-
-Provides:
-- Rate limiting via slowapi (60/min per IP)
-- JWT authentication dependency for API routes
-- Twilio webhook signature validation
-"""
 from __future__ import annotations
 
-import os
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Union
 
 import structlog
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from twilio.request_validator import RequestValidator
 
 from app.core.config import settings
 
 log = structlog.get_logger("redline_ai.security")
 
-# ---------------------------------------------------------------------------
-# Rate Limiter
-# ---------------------------------------------------------------------------
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
-# ---------------------------------------------------------------------------
-# JWT Auth
-# ---------------------------------------------------------------------------
-
+ALGORITHM = "HS256"
 _bearer_scheme = HTTPBearer(auto_error=False)
 
-ALGORITHM = "HS256"
+
+def create_access_token(
+    subject: Union[str, Any], tenant_id: str, role: str, expires_delta: timedelta | None = None
+) -> str:
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode = {
+        "exp": expire,
+        "sub": str(subject),
+        "tenant_id": str(tenant_id),
+        "role": str(role),
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
-async def require_jwt(
-    request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
-) -> dict:
-    """FastAPI dependency: validates JWT and returns the decoded payload.
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
-    Raises 401 if token is missing or invalid.
-    """
-    if credentials is None:
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+async def require_jwt_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> dict[str, Any]:
+    if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization token",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Missing bearer token",
         )
-
-    token = credentials.credentials
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
     except JWTError as exc:
-        log.warning("JWT validation failed", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Invalid token",
+        ) from exc
+
+
+async def verify_twilio_signature(request: Request) -> None:
+    if not settings.TWILIO_AUTH_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="TWILIO_AUTH_TOKEN is not configured",
         )
-    return payload
 
+    signature = request.headers.get("X-Twilio-Signature", "")
+    if not signature:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Missing Twilio signature",
+        )
 
-# ---------------------------------------------------------------------------
-# Twilio Webhook Verification
-# ---------------------------------------------------------------------------
+    form = await request.form()
+    validator = RequestValidator(settings.TWILIO_AUTH_TOKEN)
+    valid = validator.validate(str(request.url), dict(form), signature)
 
-TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Twilio signature",
+        )
 
-
-def validate_twilio_signature(request: Request) -> bool:
-    """Validate incoming Twilio webhook requests.
-
-    Returns True if validation is disabled (no auth token set) or signature is valid.
-    Raises 403 if signature is invalid.
-    """
-    if not TWILIO_AUTH_TOKEN:
-        log.debug("Twilio auth token not set — skipping signature validation")
-        return True
-
-    try:
-        from twilio.request_validator import RequestValidator
-
-        validator = RequestValidator(TWILIO_AUTH_TOKEN)
-        signature = request.headers.get("X-Twilio-Signature", "")
-        url = str(request.url)
-
-        # For POST requests, we need the form data
-        # This is a simplified check; full implementation needs form body
-        is_valid = validator.validate(url, {}, signature)
-
-        if not is_valid:
-            log.warning("Invalid Twilio webhook signature", url=url)
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Invalid Twilio signature",
-            )
-        return True
-    except ImportError:
-        log.warning("twilio package not installed — skipping signature validation")
-        return True

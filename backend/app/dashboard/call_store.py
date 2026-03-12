@@ -18,6 +18,7 @@ _calls: Deque[Dict[str, Any]] = deque(maxlen=_MAXLEN)
 
 def add_call(
     *,
+    transcript: str,
     intent: str,
     intent_confidence: float,
     emotion: str,
@@ -27,6 +28,7 @@ def add_call(
     responder: str,
     fallback_used: bool,
     intent_fallback: bool,
+    emotion_fallback: bool,
     latency_ms: float,
 ) -> str:
     """Insert a new call record. Returns the generated call_id."""
@@ -34,6 +36,7 @@ def add_call(
     record: Dict[str, Any] = {
         "call_id": call_id,
         "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "transcript": transcript,
         "intent": intent,
         "intent_confidence": round(intent_confidence, 3),
         "emotion": emotion,
@@ -43,6 +46,7 @@ def add_call(
         "responder": responder,
         "fallback_used": fallback_used,
         "intent_fallback": intent_fallback,
+        "emotion_fallback": emotion_fallback,
         "latency_ms": round(latency_ms, 1),
     }
     with _lock:

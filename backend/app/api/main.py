@@ -1,9 +1,13 @@
-"""FastAPI application for Redline AI."""
+"""FastAPI application for Redline AI (Orchestrator Pipeline).
 
+NOTE: This is the secondary FastAPI app used for the orchestrator/agent pipeline.
+The primary app is at app/main.py which handles the Stage-2 REST API.
+"""
+
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-import asyncio
 from pathlib import Path
 import uvicorn
 
@@ -19,10 +23,52 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Global instances
+plugin_registry = PluginRegistry()
+orchestrator = Orchestrator(plugin_registry)
+redis_client = RedisClient()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Modern lifespan handler replacing deprecated @app.on_event()."""
+    # ── Startup ──
+    try:
+        await redis_client.connect()
+
+        plugin_dir = Path(__file__).parent.parent / "plugins"
+        stages = ['stt', 'emotion', 'reasoning', 'severity', 'safety', 'dispatch']
+
+        for stage in stages:
+            plugin_file = plugin_dir / stage / f"mock_{stage}.py"
+            if plugin_file.exists():
+                module_path = f"plugins.{stage}.mock_{stage}"
+                await plugin_registry.load_plugin_from_path(module_path, f"mock_{stage}")
+
+        await orchestrator.initialize()
+        logger.info("Redline AI started successfully")
+
+    except Exception as e:
+        logger.error(f"Failed to start Redline AI: {e}")
+        raise
+
+    yield  # ── Application runs here ──
+
+    # ── Shutdown ──
+    try:
+        orchestrator._initialized = False
+        await plugin_registry.shutdown_all()
+        await redis_client.disconnect()
+        logger.info("Redline AI shut down successfully")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+
+
 app = FastAPI(
     title="Redline AI",
     description="Emergency Response Intelligence Platform",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware
@@ -33,50 +79,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Global instances
-plugin_registry = PluginRegistry()
-orchestrator = Orchestrator(plugin_registry)
-redis_client = RedisClient()
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize components on startup."""
-    try:
-        # Connect to Redis
-        await redis_client.connect()
-
-        # Load plugins
-        plugin_dir = Path(__file__).parent.parent / "plugins"
-        stages = ['stt', 'emotion', 'reasoning', 'severity', 'safety', 'dispatch']
-
-        for stage in stages:
-            plugin_file = plugin_dir / stage / f"mock_{stage}.py"
-            if plugin_file.exists():
-                module_path = f"plugins.{stage}.mock_{stage}"
-                await plugin_registry.load_plugin_from_path(module_path, f"mock_{stage}")
-
-        # Initialize orchestrator
-        await orchestrator.initialize()
-
-        logger.info("Redline AI started successfully")
-
-    except Exception as e:
-        logger.error(f"Failed to start Redline AI: {e}")
-        raise
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up on shutdown."""
-    try:
-        await orchestrator._initialized = False  # Simple shutdown
-        await plugin_registry.shutdown_all()
-        await redis_client.disconnect()
-        logger.info("Redline AI shut down successfully")
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
 
 
 @app.get("/")
@@ -109,10 +111,7 @@ async def process_emergency_call(file: UploadFile = File(...)):
         Dispatch report.
     """
     try:
-        # Read audio data
         audio_data = await file.read()
-
-        # Process through pipeline
         report = await orchestrator.process_emergency_call(audio_data)
 
         if report is None:
@@ -120,10 +119,12 @@ async def process_emergency_call(file: UploadFile = File(...)):
 
         return {
             "call_id": "mock_call_id",  # In production, generate unique ID
-            "dispatch_report": report.dict(),
+            "dispatch_report": report.dict() if hasattr(report, 'dict') else report,
             "processing_time": "mock_time"
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing emergency call: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")

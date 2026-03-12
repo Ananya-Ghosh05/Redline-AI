@@ -28,13 +28,50 @@ class WhisperService:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def initialize(self) -> None:
-        """Load the Whisper model (blocking – call from thread or lifespan)."""
+    def initialize(self, retries: int = 3) -> None:
+        """Load the Whisper model (blocking – call from thread or lifespan).
+
+        Uses a file lock so that when multiple Gunicorn workers start
+        concurrently only one downloads the model; the rest wait then
+        load from the cached file.
+        """
+        import fcntl
         import whisper  # type: ignore[import]
 
+        lock_path = os.path.join(tempfile.gettempdir(), "whisper_download.lock")
         log.info("Loading Whisper model '%s' …", self._model_size)
-        self._model = whisper.load_model(self._model_size)
-        log.info("Whisper model '%s' loaded.", self._model_size)
+
+        for attempt in range(1, retries + 1):
+            try:
+                with open(lock_path, "w") as lock_file:
+                    fcntl.flock(lock_file, fcntl.LOCK_EX)
+                    try:
+                        self._model = whisper.load_model(self._model_size)
+                    finally:
+                        fcntl.flock(lock_file, fcntl.LOCK_UN)
+                log.info("Whisper model '%s' loaded.", self._model_size)
+                return
+            except RuntimeError as exc:
+                if "checksum" in str(exc).lower() and attempt < retries:
+                    log.warning(
+                        "Whisper download checksum mismatch (attempt %d/%d), "
+                        "clearing cache and retrying …",
+                        attempt, retries,
+                    )
+                    self._clear_whisper_cache()
+                else:
+                    raise
+
+    @staticmethod
+    def _clear_whisper_cache() -> None:
+        """Remove cached whisper model files so the next attempt re-downloads."""
+        cache_dir = os.path.join(
+            os.getenv("XDG_CACHE_HOME", os.path.join(os.path.expanduser("~"), ".cache")),
+            "whisper",
+        )
+        if os.path.isdir(cache_dir):
+            import shutil
+            shutil.rmtree(cache_dir, ignore_errors=True)
 
     def is_ready(self) -> bool:
         return self._model is not None

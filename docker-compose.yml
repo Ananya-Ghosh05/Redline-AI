@@ -1,30 +1,79 @@
-version: '3.8'
-
 services:
   app:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     ports:
       - "8000:8000"
     environment:
-      - REDIS_URL=redis://redis:6379
+      - USE_SQLITE=false
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password
       - POSTGRES_SERVER=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DB=redline
-      - WHISPER_MODEL_SIZE=small
-      - ENABLE_DOCS=true
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - SECRET_KEY=dev-secret-change-in-production
+      - WHISPER_MODEL_SIZE=tiny
+      - OTEL_ENABLED=false
+      - GUNICORN_WORKERS=2
+      - INTENT_ONNX_PATH=/app/ml/intent/v1/intent_model.onnx
+      - EMOTION_ONNX_PATH=/app/ml/emotion/v1/emotion_model.onnx
+      - EMOTION_PT_PATH=/app/ml/emotion/v1/emotion_model.pt
+    env_file:
+      - ./backend/.env
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
     volumes:
-      - ./backend:/app
-      - whisper_models:/root/.cache/whisper # persist downloaded Whisper weights
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      - ./ml:/app/ml
+      - whisper_cache:/home/app/.cache/whisper
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+
+  celery_worker:
+    build: ./backend
+    command: >
+      celery -A workers.celery_app.celery_app worker
+      --loglevel=info
+      --queues=audio,inference,celery
+      --concurrency=2
+    environment:
+      - USE_SQLITE=false
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=redline
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - SECRET_KEY=dev-secret-change-in-production
+      - WHISPER_MODEL_SIZE=tiny
+      - INTENT_ONNX_PATH=/app/ml/intent/v1/intent_model.onnx
+      - EMOTION_ONNX_PATH=/app/ml/emotion/v1/emotion_model.onnx
+      - EMOTION_PT_PATH=/app/ml/emotion/v1/emotion_model.pt
+    env_file:
+      - ./backend/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./ml:/app/ml
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A workers.celery_app.celery_app inspect ping --timeout 10"]
+      interval: 30s
+      timeout: 15s
+      start_period: 60s
+      retries: 3
 
   redis:
     image: redis:7-alpine
@@ -33,7 +82,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -49,12 +98,42 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U user -d redline" ]
+      test: ["CMD-SHELL", "pg_isready -U user -d redline"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./backend/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=localhost
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   redis_data:
   postgres_data:
-  whisper_models:
+  prometheus_data:
+  grafana_data:
+  whisper_cache:

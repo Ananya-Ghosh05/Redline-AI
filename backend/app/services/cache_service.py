@@ -13,15 +13,23 @@ from typing import Any
 log = logging.getLogger("redline_ai.services.cache")
 
 _KEY_PREFIX = "emergency_call:"
-_DEFAULT_TTL = 300  # seconds
+
+def _default_ttl() -> int:
+    try:
+        from app.core.config import settings
+        return settings.CACHE_TTL_SECONDS  # default 600 s (10 min)
+    except Exception:
+        return 600
 
 
 async def cache_call(
     redis_client: Any,
     call_id: str,
     data: dict,
-    ttl: int = _DEFAULT_TTL,
+    ttl: int | None = None,
 ) -> None:
+    if ttl is None:
+        ttl = _default_ttl()
     """Persist call pipeline output to Redis with an expiry.
 
     Args:

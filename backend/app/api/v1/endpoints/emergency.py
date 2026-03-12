@@ -5,8 +5,9 @@ Accepts either:
   - application/json with {"transcript": "...", "caller_id": "..."}
 
 Pipeline:
-  audio → Whisper STT → intent (heuristic) → emotion (EmotionAgent)
-  → severity → dispatch → PostgreSQL → Redis cache → JSON response
+  audio → Whisper STT → intent (ONNX + keyword fallback) → emotion (EmotionAgent)
+  → severity (SeverityAgent hybrid) → dispatch (DispatchAgent intent-first)
+  → PostgreSQL → Redis cache → JSON response
 """
 
 from __future__ import annotations
@@ -25,11 +26,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.redis_client import get_redis_client
 from app.core.schemas import Transcript
+from app.core.schemas.reasoning import ReasoningOutput
+from app.core.schemas.safety import SafetyOutput, SafetyStatus
+from app.core.security import limiter
+from app.core.config import settings
 from app.models.emergency_call import EmergencyCall
 from app.services.cache_service import cache_call
-from app.services.dispatch_service import select_responder
-from app.services.intent_service import classify_intent
-from app.services.severity_service import compute_severity
+from app.dashboard import call_store
 
 log = logging.getLogger("redline_ai.api.emergency")
 
@@ -55,11 +58,14 @@ class EmergencyResponse(BaseModel):
     call_id: str
     transcript: str
     intent: str
+    intent_confidence: float
     emotion: str
+    emotion_confidence: float
     severity: str
     responder: str
     latency_ms: int
-    caller_id: Optional[str]
+    fallback_flags: dict
+    caller_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +80,7 @@ class EmergencyResponse(BaseModel):
     summary="Process an emergency call through the full AI pipeline",
     tags=["emergency"],
 )
+@limiter.limit(settings.RATE_LIMIT_EMERGENCY)
 async def process_emergency(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -138,27 +145,134 @@ async def process_emergency(
     transcript = resolved_transcript.strip()
 
     # ------------------------------------------------------------------
-    # 2. Run pipeline (intent + emotion in parallel, then severity + dispatch)
+    # 2. Acquire inference semaphore (per-worker concurrency cap)
     # ------------------------------------------------------------------
 
-    intent_task = asyncio.create_task(classify_intent(transcript))
-
-    emotion_label = "neutral"
-    emotion_loader = getattr(request.app.state, "emotion_loader", None)
-    if emotion_loader is not None:
+    semaphore = getattr(request.app.state, "inference_semaphore", None)
+    if semaphore is not None:
         try:
-            from app.agents.emotion.emotion_agent import EmotionAgent
+            # Non-blocking acquire: if all slots busy, shed the request
+            await asyncio.wait_for(semaphore.acquire(), timeout=0.5)
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Inference capacity exhausted — retry in a moment.",
+                headers={"Retry-After": "2"},
+            )
+    semaphore_acquired = semaphore is not None
 
-            agent = EmotionAgent(loader=emotion_loader)
-            emotion_result = await agent.process(Transcript(text=transcript))
-            emotion_label = emotion_result.primary_emotion.value
-        except Exception as exc:
-            log.warning("EmotionAgent failed, using neutral fallback: %s", exc)
+    try:
+        return await _run_pipeline(
+            request=request,
+            transcript=transcript,
+            caller_id=caller_id,
+            db=db,
+            t_start=t_start,
+        )
+    finally:
+        if semaphore_acquired:
+            semaphore.release()
 
-    intent = await intent_task
 
-    severity = await compute_severity(transcript, emotion_label)
-    responder = await select_responder(intent, severity)
+async def _run_pipeline(
+    *,
+    request: Request,
+    transcript: str,
+    caller_id,
+    db,
+    t_start: float,
+) -> "EmergencyResponse":
+    """Execute the full ML pipeline (called inside the semaphore guard)."""
+
+    # ------------------------------------------------------------------
+    # Pipeline: intent → emotion, then severity → dispatch
+    # ------------------------------------------------------------------
+
+    # ── Intent (ONNX DistilBERT + keyword fallback) ───────────────────
+    intent = "unknown"
+    intent_confidence = 0.0
+    intent_fallback = True
+    try:
+        from app.agents.intent.intent_agent import IntentAgent
+
+        intent_loader = getattr(request.app.state, "intent_loader", None)
+        intent_agent = IntentAgent(loader=intent_loader)
+        intent_result = await intent_agent.process(Transcript(text=transcript, confidence=1.0))
+        intent = intent_result.intent.value
+        intent_confidence = float(intent_result.confidence)
+        intent_fallback = bool(intent_result.fallback_used)
+    except Exception as exc:
+        log.warning("IntentAgent failed, using unknown fallback: %s", exc)
+
+    # ── Emotion (ONNX CNN + heuristic fallback + circuit breaker) ─────
+    emotion_label = "neutral"
+    emotion_confidence = 0.0
+    emotion_intensity = 0.0
+    emotion_fallback = True
+    try:
+        from app.agents.emotion.emotion_agent import EmotionAgent
+
+        emotion_loader = getattr(request.app.state, "emotion_loader", None)
+        agent = EmotionAgent(loader=emotion_loader)
+        emotion_result = await agent.process(Transcript(text=transcript, confidence=1.0))
+        emotion_label = emotion_result.primary_emotion.value
+        emotion_confidence = float(emotion_result.confidence)
+        emotion_intensity = float(emotion_result.intensity)
+        # confidence == 0.0 flags a forced neutral fallback (circuit open / total failure)
+        emotion_fallback = emotion_confidence <= 0.0
+    except Exception as exc:
+        log.warning("EmotionAgent failed, using neutral fallback: %s", exc)
+
+    # ── Severity (hybrid SeverityAgent: 50% intent + 25% keyword + 15% emotion + 10% reasoning)
+    severity = "low"
+    try:
+        from app.agents.severity.severity_agent import SeverityAgent
+
+        severity_agent = SeverityAgent()
+        reasoning_input = ReasoningOutput(
+            key_insights=[],
+            risk_factors=[],
+            context_summary=transcript,
+            confidence=intent_confidence,
+            metadata={
+                "transcript": transcript,
+                "intent": intent,
+                "emotion_intensity": emotion_intensity,
+                "reasoning_score": intent_confidence,
+            },
+        )
+        severity_result = await severity_agent.process(reasoning_input)
+        severity = severity_result.level.value
+    except Exception as exc:
+        log.warning("SeverityAgent failed, using low fallback: %s", exc)
+
+    # ── Dispatch (intent-first routing with critical keyword override) ─
+    responder = "police"
+    try:
+        from app.agents.dispatch.dispatch_agent import DispatchAgent
+
+        # Map severity → SafetyStatus so DispatchAgent can escalate priority
+        if severity in ("critical", "high"):
+            safety_status = SafetyStatus.UNSAFE
+        elif severity == "medium":
+            safety_status = SafetyStatus.WARNING
+        else:
+            safety_status = SafetyStatus.SAFE
+
+        dispatch_agent = DispatchAgent()
+        safety_input = SafetyOutput(
+            status=safety_status,
+            confidence=intent_confidence,
+            metadata={
+                "intent": intent,
+                "intent_confidence": intent_confidence,
+                "keyword_text": transcript,
+            },
+        )
+        dispatch_result = await dispatch_agent.process(safety_input)
+        responder = dispatch_result.responder
+    except Exception as exc:
+        log.warning("DispatchAgent failed, using police fallback: %s", exc)
 
     # ------------------------------------------------------------------
     # 3. Persist to PostgreSQL
@@ -192,18 +306,42 @@ async def process_emergency(
     # 4. Cache in Redis (fire-and-forget — never blocks response)
     # ------------------------------------------------------------------
 
+    fallback_flags = {
+        "intent_fallback": intent_fallback,
+        "emotion_fallback": emotion_fallback,
+    }
+
     call_data = {
         "call_id": str(call_id),
         "caller_id": caller_id,
         "transcript": transcript,
         "intent": intent,
+        "intent_confidence": intent_confidence,
         "emotion": emotion_label,
+        "emotion_confidence": emotion_confidence,
         "severity": severity,
         "responder": responder,
         "latency_ms": latency_ms,
+        "fallback_flags": fallback_flags,
     }
     asyncio.create_task(
         cache_call(get_redis_client(), str(call_id), call_data)
+    )
+
+    fallback_used = intent_fallback or emotion_fallback
+    call_store.add_call(
+        transcript=transcript,
+        intent=intent,
+        intent_confidence=intent_confidence,
+        emotion=emotion_label,
+        emotion_confidence=emotion_confidence,
+        severity=severity,
+        severity_score=0.0,
+        responder=responder,
+        fallback_used=fallback_used,
+        intent_fallback=intent_fallback,
+        emotion_fallback=emotion_fallback,
+        latency_ms=float(latency_ms),
     )
 
     # ------------------------------------------------------------------
@@ -214,9 +352,12 @@ async def process_emergency(
         call_id=str(call_id),
         transcript=transcript,
         intent=intent,
+        intent_confidence=intent_confidence,
         emotion=emotion_label,
+        emotion_confidence=emotion_confidence,
         severity=severity,
         responder=responder,
         latency_ms=latency_ms,
+        fallback_flags=fallback_flags,
         caller_id=caller_id,
     )

@@ -164,6 +164,7 @@ class DispatchAgent(BaseAgent):
             return DispatchReport(
                 action=DispatchAction.SEND_EMERGENCY_SERVICES,
                 priority="immediate",
+                responder="ambulance",
                 resources_required=["police", "ambulance", "fire department"],
                 reasoning="Critical keyword detected — all emergency services dispatched.",
                 confidence=1.0,
@@ -196,6 +197,7 @@ class DispatchAgent(BaseAgent):
             return DispatchReport(
                 action=action,
                 priority=priority,
+                responder=responder,
                 resources_required=resources,
                 reasoning=(
                     f"Intent '{intent.value}' (confidence={intent_confidence:.2f}) "
@@ -216,6 +218,7 @@ class DispatchAgent(BaseAgent):
         return DispatchReport(
             action=action,
             priority="urgent" if action == DispatchAction.SEND_EMERGENCY_SERVICES else "routine",
+            responder=responder,
             resources_required=resources,
             reasoning=(
                 f"Intent confidence {intent_confidence:.2f} below threshold — "

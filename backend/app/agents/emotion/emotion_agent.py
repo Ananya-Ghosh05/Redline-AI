@@ -75,6 +75,12 @@ _URGENCY_KEYWORDS: frozenset[str] = frozenset(
         "explosion",
         "crash",
         "accident",
+        # Medical emergency phrases — critical heuristic coverage
+        "not breathing",
+        "collapsed",
+        "cardiac arrest",
+        "help me",
+        "unconscious",
     ]
 )
 
@@ -88,7 +94,6 @@ _DISTRESS_KEYWORDS: frozenset[str] = frozenset(
         "fast",
         "bad",
         "bleeding",
-        "unconscious",
         "faint",
     ]
 )
