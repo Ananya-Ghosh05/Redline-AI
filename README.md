@@ -8,6 +8,27 @@
 
 Redline AI is a cutting-edge, open-source AI-powered Interactive Voice Response (IVR) platform designed for emergency dispatch and crisis management. It leverages advanced machine learning for real-time speech processing, intelligent intent classification, emotional state analysis, and automated emergency responder routing.
 
+## Live Demo
+
+The platform is deployed on **GCP Cloud Run** with continuous deployment from `main`.
+
+| Resource | URL |
+|----------|-----|
+| Interactive Demo | https://redline-ai-359883234654.us-central1.run.app/demo |
+| Dispatch Dashboard | https://redline-ai-359883234654.us-central1.run.app/dashboard/login |
+| Swagger API Docs | https://redline-ai-359883234654.us-central1.run.app/docs |
+| Health Check | https://redline-ai-359883234654.us-central1.run.app/health |
+
+### Demo Credentials
+
+| Role | Email | Password |
+|------|-------|----------|
+| Super Admin | `admin@redline.ai` | `RedlineDemo2026!` |
+| Dispatcher | `dispatcher@redline.ai` | `RedlineDemo2026!` |
+
+> **Note:** These are demo-only credentials. The demo environment resets periodically.
+
+
 ## Key Capabilities
 
 ### Intelligent Call Processing
