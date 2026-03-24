@@ -1,5 +1,9 @@
 # Redline AI - Intelligent Emergency Response Platform
 
+Originally developed at Ananya-Ghosh05/Redline-AI as a team project. This fork represents Gemini integration, CI/CD pipeline, and production deployment.
+
+[![CI](https://github.com/mangod12/redline-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/mangod12/redline-AI/actions/workflows/ci.yml)
+[![Deploy](https://github.com/mangod12/redline-AI/actions/workflows/deploy-gcp.yml/badge.svg)](https://github.com/mangod12/redline-AI/actions/workflows/deploy-gcp.yml)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
 [![Python](https://img.shields.io/badge/python-v3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-009688.svg)](https://fastapi.tiangolo.com)
@@ -28,7 +32,6 @@ The platform is deployed on **GCP Cloud Run** with continuous deployment from `m
 
 > **Note:** These are demo-only credentials. The demo environment resets periodically.
 
-
 ## Key Capabilities
 
 ### Intelligent Call Processing
@@ -51,6 +54,7 @@ The platform is deployed on **GCP Cloud Run** with continuous deployment from `m
 
 ## Table of Contents
 
+- [Live Demo](#live-demo)
 - [High Level Design (HLD)](#high-level-design-hld)
 - [Low Level Design (LLD)](#low-level-design-lld)
 - [Data Architecture](#data-architecture)
@@ -572,17 +576,17 @@ class SeverityEngine:
 
 ## Roadmap & Future Enhancements
 
-### Q2 2024
+### Q2 2026
 - [ ] **Enhanced Multi-Modal Analysis**: Video call support with facial expression analysis
 - [ ] **Advanced Geofencing**: Automatic jurisdiction routing based on caller location
 - [ ] **Predictive Analytics**: Call volume forecasting and resource optimization
 
-### Q3 2024  
+### Q3 2026
 - [ ] **Mobile App**: Native iOS/Android app for field responders
 - [ ] **Integration Marketplace**: Pre-built connectors for popular CAD systems
 - [ ] **Advanced Reporting**: Business intelligence dashboard with custom metrics
 
-### Q4 2024
+### Q4 2026
 - [ ] **Edge Deployment**: Kubernetes operators for multi-region deployment
 - [ ] **AI Improvement**: Self-learning models that improve with usage
 - [ ] **Compliance Module**: HIPAA, SOC2, and government compliance features
@@ -1924,32 +1928,3 @@ This project includes several third-party components:
 - **FastAPI**: MIT License
 - **PostgreSQL**: PostgreSQL License
 - **Redis**: BSD 3-Clause License
-
-## Roadmap & Future Enhancements
-
-### Q2 2024
-- Enhanced multi-modal analysis with video call support
-- Advanced geofencing and jurisdiction routing
-- Predictive analytics for call volume forecasting
-
-### Q3 2024  
-- Native iOS/Android app for field responders
-- Integration marketplace with pre-built CAD connectors
-- Advanced reporting and business intelligence dashboard
-
-### Q4 2024
-- Kubernetes operators for multi-region deployment
-- Self-learning models that improve with usage
-- HIPAA, SOC2, and government compliance features
-
----
-
-**Ready to deploy intelligent emergency response?**
-
-Start with our [Quick Start Guide](#quick-start) or check out the [live demo](https://demo.redlineai.com) to see Redline AI in action.
-
-For enterprise deployments, security reviews, or custom integrations, contact the maintainers.
-
----
-
-*Built with care for emergency responders and the communities they serve.*
